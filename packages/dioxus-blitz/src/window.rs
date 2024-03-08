@@ -2,22 +2,18 @@ use super::Config;
 use crate::waker::UserWindowEvent;
 use blitz::{RenderState, Renderer, Viewport};
 use blitz_dom::Document;
-use dioxus::dioxus_core::{Component, ComponentFunction, VirtualDom};
-use dioxus::html::view;
-use dioxus::prelude::Element;
+use dioxus::dioxus_core::{ComponentFunction, VirtualDom};
 use futures_util::{pin_mut, FutureExt};
-use muda::{AboutMetadata, LogicalPosition, Menu, MenuId, MenuItem, PredefinedMenuItem, Submenu};
+use muda::{AboutMetadata,  Menu, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use std::sync::Arc;
 use std::task::Waker;
-use style::media_queries::Device;
 use tao::dpi::LogicalSize;
-use tao::event::{ElementState, MouseButton};
+use tao::event::{ElementState, KeyEvent, MouseButton};
 use tao::event_loop::{EventLoopProxy, EventLoopWindowTarget};
 #[cfg(target_os = "windows")]
 use tao::platform::windows::WindowExtWindows;
 use tao::{
     event::WindowEvent,
-    event_loop::EventLoop,
     keyboard::KeyCode,
     keyboard::ModifiersState,
     window::{Window, WindowBuilder},
@@ -32,21 +28,22 @@ pub(crate) struct View<'s> {
     /// The state of the keyboard modifiers (ctrl, shift, etc). Winit/Tao don't track these for us so we
     /// need to store them in order to have access to them when processing keypress events
     keyboard_modifiers: ModifiersState,
+    menu: Menu,
 }
 
 impl<'a> View<'a> {
     pub(crate) fn new<P: 'static + Clone, M: 'static>(
-        event_loop: &EventLoop<UserWindowEvent>,
         root: impl ComponentFunction<P, M>,
         props: P,
         cfg: &Config,
+        menu: Menu
     ) -> Self {
         // Spin up the virtualdom
         // We're going to need to hit it with a special waker
         let mut vdom = VirtualDom::new_with_props(root, props);
         vdom.rebuild_in_place();
         let markup = dioxus_ssr::render(&vdom);
-        let mut scene = Scene::new();
+        let scene = Scene::new();
 
         let mut dom = Document::new(Viewport::new((0, 0)).make_device());
 
@@ -68,7 +65,7 @@ impl<'a> View<'a> {
         // let device = viewport.make_device();
         // self.dom.set_stylist_device(device);
 
-        let mut renderer = Renderer::new(dom);
+        let renderer = Renderer::new(dom);
 
         Self {
             renderer,
@@ -76,6 +73,7 @@ impl<'a> View<'a> {
             scene,
             waker: None,
             keyboard_modifiers: Default::default(),
+            menu,
         }
     }
 
@@ -117,10 +115,9 @@ impl<'a> View<'a> {
     pub fn handle_window_event(&mut self, event: WindowEvent) {
         match event {
             WindowEvent::MouseInput {
-                device_id,
                 state,
                 button,
-                modifiers,
+                ..
             } => {
                 if state == ElementState::Pressed && button == MouseButton::Left {
                     self.renderer.click()
@@ -142,26 +139,33 @@ impl<'a> View<'a> {
             WindowEvent::KeyboardInput { event, .. } => {
                 dbg!(&event);
 
+                let control_pressed_callback = |event: &KeyEvent| {
+                    if event.state == ElementState::Pressed {
+                        if self.keyboard_modifiers.control_key() || self.keyboard_modifiers.super_key()
+                        {
+                            return true;
+                        }
+                    }
+                    false
+                };
+
                 match event.physical_key {
                     KeyCode::Equal => {
-                        if self.keyboard_modifiers.control_key()
-                            || self.keyboard_modifiers.super_key()
-                        {
+                        if control_pressed_callback(&event) {
                             self.renderer.zoom(0.1);
                             self.request_redraw();
                         }
                     }
                     KeyCode::Minus => {
-                        if self.keyboard_modifiers.control_key()
-                            || self.keyboard_modifiers.super_key()
-                        {
+                        if control_pressed_callback(&event) {
                             self.renderer.zoom(-0.1);
                             self.request_redraw();
                         }
                     }
                     KeyCode::Digit0 => {
-                        if self.keyboard_modifiers.control_key()
-                            || self.keyboard_modifiers.super_key()
+                        if event.state == ElementState::Pressed
+                            && (self.keyboard_modifiers.control_key()
+                                || self.keyboard_modifiers.super_key())
                         {
                             self.renderer.reset_zoom();
                             self.request_redraw();
@@ -233,7 +237,13 @@ impl<'a> View<'a> {
             WindowEvent::ScaleFactorChanged {
                 scale_factor,
                 new_inner_size,
-            } => {}
+            } => {
+                if let RenderState::Active(state) = &mut self.renderer.render_state {
+                    state.viewport.set_hidpi_scale(scale_factor as _);
+                    self.renderer.set_size((new_inner_size.width, new_inner_size.height));
+                    self.request_redraw();
+                }
+            }
             WindowEvent::ThemeChanged(_) => {}
             WindowEvent::DecorationsClick => {}
             _ => {}
@@ -258,19 +268,18 @@ impl<'a> View<'a> {
 
             #[cfg(target_os = "windows")]
             {
-                build_menu().init_for_hwnd(window.hwnd());
+                self.menu.init_for_hwnd(window.hwnd()).expect("Failed to init menu");
             }
             #[cfg(target_os = "linux")]
             {
-                build_menu().init_for_gtk_window(window.gtk_window(), window.default_vbox());
+                self.menu.init_for_gtk_window(window.gtk_window(), window.default_vbox());
             }
 
-            // !TODO - this may not be the right way to do this, but it's a start
-            // #[cfg(target_os = "macos")]
-            // {
-            //     menu_bar.init_for_nsapp();
-            //     build_menu().set_as_windows_menu_for_nsapp();
-            // }
+            #[cfg(target_os = "macos")]
+            {
+                self.menu.init_for_nsapp();
+                self.menu.set_as_windows_menu_for_nsapp();
+            }
 
             let size: tao::dpi::PhysicalSize<u32> = window.inner_size();
             let mut viewport = Viewport::new((size.width, size.height));
@@ -286,7 +295,7 @@ impl<'a> View<'a> {
         };
 
         self.waker = Some(crate::waker::tao_waker(&proxy, state.window.id()));
-        self.renderer.render(&mut self.scene);
+        self.request_redraw();
     }
 
     pub fn suspend(&mut self) {
@@ -295,7 +304,7 @@ impl<'a> View<'a> {
     }
 }
 
-fn build_menu() -> Menu {
+pub(crate) fn build_menu() -> Menu {
     let mut menu = Menu::new();
 
     // Build the about section
@@ -304,7 +313,7 @@ fn build_menu() -> Menu {
     about.append_items(&[
         &PredefinedMenuItem::about("Dioxus".into(), Option::from(AboutMetadata::default())),
         &MenuItem::with_id(MenuId::new("dev.show_layout"), "Show layout", true, None),
-    ]);
+    ]).unwrap();
 
     menu.append(&about).unwrap();
 

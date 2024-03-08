@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 tao = { version = "0.26.1", features = ["serde"] }
-muda = { version = "0.11.5", features = ["serde"] }
+muda = { version = "0.12.0", features = ["serde"] }
 tokio = { workspace = true, features = ["full"] }
 dioxus = { workspace = true }
 dioxus-ssr = { workspace = true }
@@ -17,3 +17,19 @@ wgpu = { workspace = true }
 style = { workspace = true }
 blitz = { path = "../blitz" }
 blitz-dom = { path = "../dom" }
+
+[target."cfg(target_os = \"windows\")".dependencies.windows-sys]
+version = "0.52"
+features = [
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_UI_Shell",
+  "Win32_Globalization",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_System_SystemServices",
+  "Win32_UI_Accessibility",
+  "Win32_UI_HiDpi",
+  "Win32_System_LibraryLoader",
+  "Win32_UI_Controls"
+]

@@ -6,13 +6,14 @@ use blitz::RenderState;
 use dioxus::prelude::*;
 use muda::{MenuEvent, MenuId};
 use std::collections::HashMap;
-use std::thread::Scope;
 use tao::event_loop::EventLoopBuilder;
 use tao::window::WindowId;
 use tao::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
 };
+#[cfg(target_os = "windows")]
+use tao::platform::windows::EventLoopBuilderExtWindows;
 
 #[derive(Default)]
 pub struct Config {
@@ -43,13 +44,31 @@ pub fn launch_cfg_with_props<P: Clone + 'static, M: 'static>(
     let _guard = rt.enter();
 
     // Build an event loop for the application
-    let event_loop = EventLoopBuilder::<UserWindowEvent>::with_user_event().build();
+    let mut event_loop_builder = EventLoopBuilder::<UserWindowEvent>::with_user_event();
+
+
+    let menu_bar = crate::window::build_menu();
+
+    #[cfg(target_os = "windows")]
+    {
+        let menu_bar = menu_bar.clone();
+        event_loop_builder.with_msg_hook(move |msg| {
+            use windows_sys::Win32::UI::WindowsAndMessaging::{TranslateAcceleratorW, MSG};
+            unsafe {
+                let msg = msg as *const MSG;
+                let translated = TranslateAcceleratorW((*msg).hwnd, menu_bar.haccel(), msg);
+                translated == 1
+            }
+        });
+    }
+
+    let event_loop = event_loop_builder.build();
     let proxy = event_loop.create_proxy();
 
     // Multiwindow ftw
     let mut windows: HashMap<WindowId, window::View> = HashMap::new();
     let mut pending_windows = Vec::new();
-    let window = crate::window::View::new(&event_loop, root, props, &cfg);
+    let window = crate::window::View::new( root, props, &cfg, menu_bar.clone());
     pending_windows.push(window);
     let menu_channel = MenuEvent::receiver();
 
@@ -106,7 +125,12 @@ pub fn launch_cfg_with_props<P: Clone + 'static, M: 'static>(
             Event::RedrawRequested(window_id) => {
                 windows.get_mut(&window_id).map(|window| {
                     window.renderer.dom.resolve();
-                    window.renderer.render(&mut window.scene);
+                    match window.renderer.render(&mut window.scene) {
+                        Ok(_) => {}
+                        Err(wgpu::SurfaceError::Lost) => window.renderer.kick_viewport(),
+                        Err(wgpu::SurfaceError::OutOfMemory) => *control_flow = ControlFlow::Exit,
+                        Err(e) => eprintln!("{:?}", e),
+                    }
                 });
             }
 

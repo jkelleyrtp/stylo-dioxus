@@ -4,24 +4,30 @@
 use dioxus::prelude::{GlobalAttributes, SvgAttributes, *};
 
 fn main() {
+    //launch(app);
     dioxus_blitz::launch(app);
 }
 
 fn app() -> Element {
     rsx! {
         head { style { {CSS} } }
-        div {
-            "hi           "
-        }
-        div { class: "colorful", id: "a", "    Dioxus12312312312321\n\n\n\n\n\n\n\n        hi " }
-        div { class: "colorful", id: "b", "    Dioxus12312312312321\n\n\n\n\n\n\n\n        hi " }
-        div { class: "colorful", id: "c", "    Dioxus12312312312321\n\n\n\n\n\n\n\n        hi " }
-        div { class: "colorful", id: "d", "    Dioxus12312312312321\n\n\n\n\n\n\n\n        hi " }
-        div { class: "colorful", id: "e", "    Dioxus12312312312321\n\n\n\n\n\n\n\n        hi " }
+        div { border: "1px solid black", "This is a box with a border around it." }
+        div { border: "dashed red", "This is a box with a dashed red border." }
+        div { border_image: "repeating-linear-gradient(30deg, #4d9f0c, #9198e5, #4d9f0c 20px) 60", "This is a box with a border image." }
+
+        // div { class: "colorful", id: "a", "    Dioxus12312312312321\n\n\n\n\n\n\n\n        hi " }
+        // div { class: "colorful", id: "b", "    Dioxus12312312312321\n\n\n\n\n\n\n\n        hi " }
+        // div { class: "colorful", id: "c", "    Dioxus12312312312321\n\n\n\n\n\n\n\n        hi " }
+        // div { class: "colorful", id: "d", "    Dioxus12312312312321\n\n\n\n\n\n\n\n        hi " }
+        // div { class: "colorful", id: "e", "    Dioxus12312312312321\n\n\n\n\n\n\n\n        hi " }
     }
 }
 
 const CSS: &str = r#"
+div {
+    margin: 20px;
+    padding: 20px;
+}
 .colorful {
     border-right-color: #000;
     border-left-color: #ff0;
