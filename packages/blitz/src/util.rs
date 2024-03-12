@@ -30,7 +30,7 @@ mod stylo_types {
     >;
 
     //
-    pub type GradientSlice = OwnedSlice<GenericGradientItem<Color<Percentage>, LengthPercentage>>;
+    pub type GradientSlice<T = LengthPercentage> = OwnedSlice<GenericGradientItem<Color<Percentage>, T>>;
 
     use vello::peniko::Color as VelloColor;
 

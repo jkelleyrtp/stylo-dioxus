@@ -7,17 +7,16 @@ members = ["packages/blitz", "packages/dom", "packages/dioxus-blitz"]
 resolver = "2"
 
 [workspace.dependencies]
-style = { git = "https://github.com/servo/stylo", rev = "e2a4834" }
-style_config = { git = "https://github.com/servo/stylo", rev = "e2a4834" }
-style_traits = { git = "https://github.com/servo/stylo", rev = "e2a4834" }
-selectors = { git = "https://github.com/servo/stylo", rev = "e2a4834" }
+style = { git = "https://github.com/servo/stylo", rev = "6d01b59" }
+style_config = { git = "https://github.com/servo/stylo", rev = "6d01b59" }
+style_traits = { git = "https://github.com/servo/stylo", rev = "6d01b59" }
+selectors = { git = "https://github.com/servo/stylo", rev = "6d01b59" }
 
 taffy = { version = "0.4" }
 dioxus = { git = "https://github.com/dioxuslabs/dioxus", rev = "9ae3d14" }
 dioxus-ssr = { git = "https://github.com/dioxuslabs/dioxus", rev = "9ae3d14" }
 tokio = { version = "1.25.0", features = ["full"] }
-vello = { version = "0.1", features = ["wgpu"] }
-# fello = { git = "https://github.com/linebender/vello" }
+vello = { git = "https://github.com/linebender/vello", features = ["wgpu"], rev = "755fc5b" }
 wgpu = "0.19"
 
 # This is a "virtual package"
@@ -44,30 +43,7 @@ blitz = { path = "./packages/blitz" }
 blitz-dom = { path = "./packages/dom" }
 comrak = { version = "0.21.0", default-features = false }
 dioxus-blitz = { path = "./packages/dioxus-blitz" }
-dioxus = { workspace = true }
+dioxus = { workspace = true , features = ["desktop"] }
 euclid = { version = "0.22", features = ["serde"] }
 reqwest = "0.11.24"
 tokio = { version = "1.36.0", features = ["full"] }
-
-# # need to match the patching of
-# [patch."https://github.com/servo/webrender"]
-# webrender_api = { git = "https://github.com/servo/servo", rev = "95931de" }
-# webrender = { git = "https://github.com/servo/servo", rev = "95931de" }
-
-# [patch.crates-io]
-# webrender_api = { git = "https://github.com/servo/servo", rev = "95931de" }
-# webrender = { git = "https://github.com/servo/servo", rev = "95931de" }
-
-
-# webrender_api = { path = "../../../servo/third_party/webrender/webrender_api" }
-# webrender = { path = "../../../servo/third_party/webrender/webrender" }
-# webrender_api = { path = "../../../servo/third_party/webrender/webrender_api" }
-# webrender = { path = "../../../servo/third_party/webrender/webrender" }
-
-# [patch."https://github.com/servo/webrender"]
-# webrender_api = { path = "../servo/third_party/webrender/webrender_api" }
-# webrender = { path = "../servo/third_party/webrender/webrender" }
-
-# [patch.crates-io]
-# webrender_api = { path = "../servo/third_party/webrender/webrender_api" }
-# webrender = { path = "../servo/third_party/webrender/webrender" }
