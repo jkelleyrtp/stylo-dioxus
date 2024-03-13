@@ -1,5 +1,6 @@
 use super::Config;
 use crate::waker::UserWindowEvent;
+use crate::DocumentLike;
 use blitz::{RenderState, Renderer, Viewport};
 use blitz_dom::Document;
 use dioxus::dioxus_core::{ComponentFunction, VirtualDom};
@@ -21,8 +22,8 @@ use tao::{
 };
 use vello::Scene;
 
-pub(crate) struct View<'s> {
-    pub(crate) renderer: Renderer<'s, Window>,
+pub(crate) struct View<'s, Doc: DocumentLike> {
+    pub(crate) renderer: Renderer<'s, Window, Doc>,
     pub(crate) vdom: VirtualDom,
     pub(crate) scene: Scene,
     pub(crate) waker: Option<Waker>,
@@ -31,7 +32,7 @@ pub(crate) struct View<'s> {
     keyboard_modifiers: ModifiersState,
 }
 
-impl<'a> View<'a> {
+impl<'a> View<'a, Document> {
     pub(crate) fn new<P: 'static + Clone, M: 'static>(
         root: impl ComponentFunction<P, M>,
         props: P,
@@ -73,7 +74,9 @@ impl<'a> View<'a> {
             keyboard_modifiers: Default::default(),
         }
     }
+}
 
+impl<'a, Doc: DocumentLike> View<'a, Doc> {
     pub(crate) fn poll(&mut self) {
         match &self.waker {
             None => {}
