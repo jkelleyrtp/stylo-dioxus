@@ -61,8 +61,8 @@ pub enum RenderState<'s, W> {
     Suspended(Option<(Arc<W>, Viewport)>),
 }
 
-pub struct Renderer<'s, W> {
-    pub dom: Document,
+pub struct Renderer<'s, W, DocumentLike: AsRef<Document> + AsMut<Document> + Into<Document>> {
+    pub dom: DocumentLike,
 
     pub render_state: RenderState<'s, W>,
 
@@ -84,7 +84,8 @@ pub struct Renderer<'s, W> {
     scroll_offset: f64,
 }
 
-impl<'a, W> Renderer<'a, W>
+impl<'a, W, DocumentLike: AsRef<Document> + AsMut<Document> + Into<Document>>
+    Renderer<'a, W, DocumentLike>
 where
     W: raw_window_handle::HasWindowHandle
         + raw_window_handle::HasDisplayHandle
@@ -92,7 +93,7 @@ where
         + WasmNotSend
         + 'a,
 {
-    pub fn new(dom: Document) -> Self {
+    pub fn new(dom: DocumentLike) -> Self {
         // 1. Set up renderer-specific stuff
         // We build an independent viewport which can be dynamically set later
         // The intention here is to split the rendering pipeline away from tao/windowing for rendering to images
@@ -121,7 +122,7 @@ where
         let (window, viewport) = cached_window.take().unwrap_or_else(|| window_builder());
 
         let device = viewport.make_device();
-        self.dom.set_stylist_device(device);
+        self.dom.as_mut().set_stylist_device(device);
 
         let surface = self
             .render_context
@@ -160,7 +161,7 @@ where
             viewport,
         });
 
-        self.dom.resolve();
+        self.dom.as_mut().resolve();
     }
 
     pub fn suspend(&mut self) {
@@ -191,7 +192,7 @@ where
 
     pub fn mouse_move(&mut self, x: f32, y: f32) -> bool {
         let old_id = self.hover_node_id;
-        self.hover_node_id = self.dom.hit(x, y);
+        self.hover_node_id = self.dom.as_ref().hit(x, y);
         if old_id != self.hover_node_id {
             // println!("Hovered node: {:?}", self.hover_node_id);
             self.devtools.highlight_hover
@@ -216,9 +217,10 @@ where
 
     /// Clamp scroll offset
     fn clamp_scroll(&mut self) {
-        let content_height = self.dom.root_element().final_layout.size.height as f64;
+        let content_height = self.dom.as_ref().root_element().final_layout.size.height as f64;
         let viewport_height = self
             .dom
+            .as_mut()
             .stylist_device()
             .au_viewport_size()
             .height
@@ -232,7 +234,7 @@ where
     pub fn click(&mut self) {
         if self.devtools.highlight_hover {
             if let Some(node_id) = self.hover_node_id {
-                let node = &self.dom.tree()[node_id];
+                let node = &self.dom.as_ref().tree()[node_id];
                 println!("Node {} {}", node.id, node.node_debug_str());
                 dbg!(&node.final_layout);
                 dbg!(&node.style);
@@ -240,7 +242,7 @@ where
                 let children: Vec<_> = node
                     .children
                     .iter()
-                    .map(|id| &self.dom.tree()[*id])
+                    .map(|id| &self.dom.as_ref().tree()[*id])
                     .map(|node| (node.id, node.order(), node.node_debug_str()))
                     .collect();
 
@@ -251,7 +253,7 @@ where
     }
 
     pub fn print_taffy_tree(&self) {
-        taffy::print_tree(&self.dom, taffy::NodeId::from(0usize));
+        taffy::print_tree(self.dom.as_ref(), taffy::NodeId::from(0usize));
     }
 
     // Adjust the viewport
@@ -272,6 +274,7 @@ where
 
         if width > 0 && height > 0 {
             self.dom
+                .as_mut()
                 .set_stylist_device(dbg!(state.viewport.make_device()));
             dbg!(&state.viewport);
             self.render_context
@@ -290,7 +293,7 @@ where
         scene.reset();
         self.render_element(
             scene,
-            self.dom.root_element().id,
+            self.dom.as_ref().root_element().id,
             Point {
                 x: 0.0,
                 y: self.scroll_offset,
@@ -346,7 +349,7 @@ where
         };
         let scale = state.viewport.scale_f64();
 
-        let mut node = &self.dom.tree()[node_id];
+        let mut node = &self.dom.as_ref().tree()[node_id];
 
         let taffy::Layout {
             size,
@@ -369,7 +372,7 @@ where
         let mut abs_x = x;
         let mut abs_y = y;
         while let Some(parent_id) = node.parent {
-            node = &self.dom.tree()[parent_id];
+            node = &self.dom.as_ref().tree()[parent_id];
             let taffy::Point { x, y } = node.final_layout.location;
             abs_x += x;
             abs_y += y;
@@ -484,7 +487,7 @@ where
         //  - inherited_box, inherited_table, inherited_text, inherited_ui,
         use markup5ever_rcdom::NodeData;
 
-        let element = &self.dom.tree()[node];
+        let element = &self.dom.as_ref().tree()[node];
 
         // Early return if the element is hidden
         if matches!(element.style.display, taffy::prelude::Display::None) {
@@ -535,7 +538,7 @@ where
         cx.draw_image(scene);
 
         for child in &cx.element.children {
-            match &self.dom.tree()[*child].node.data {
+            match &self.dom.as_ref().tree()[*child].node.data {
                 NodeData::Element { .. } => self.render_element(scene, *child, cx.pos),
                 NodeData::Text { contents } => {
                     let (_layout, pos) = self.node_position(*child, cx.pos);
@@ -595,7 +598,7 @@ where
     }
 
     fn layout(&self, child: usize) -> Layout {
-        self.dom.tree()[child].unrounded_layout
+        self.dom.as_ref().tree()[child].unrounded_layout
         // self.dom.tree()[child].final_layout
     }
 }

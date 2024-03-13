@@ -395,3 +395,15 @@ impl Document {
 
     pub fn add_element(&mut self) {}
 }
+
+impl AsRef<Document> for Document {
+    fn as_ref(&self) -> &Document {
+        self
+    }
+}
+
+impl AsMut<Document> for Document {
+    fn as_mut(&mut self) -> &mut Document {
+        self
+    }
+}

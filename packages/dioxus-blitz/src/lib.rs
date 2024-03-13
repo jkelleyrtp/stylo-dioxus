@@ -1,8 +1,12 @@
 mod waker;
 mod window;
+mod documents;
 
 use crate::waker::{EventData, UserWindowEvent};
+use crate::documents::DocumentLike;
+
 use blitz::RenderState;
+use blitz_dom::Document;
 use dioxus::prelude::*;
 use muda::{MenuEvent, MenuId};
 use std::collections::HashMap;
@@ -70,7 +74,9 @@ pub fn launch_static_html_cfg(html: &str, cfg: Config) {
     launch_with_window(crate::window::View::from_html(html, &cfg))
 }
 
-fn launch_with_window(window: crate::window::View<'static>) {
+fn launch_with_window<Doc: DocumentLike + 'static>(
+    window: crate::window::View<'static, Doc>,
+) {
     // Turn on the runtime and enter it
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -84,7 +90,7 @@ fn launch_with_window(window: crate::window::View<'static>) {
     let proxy = event_loop.create_proxy();
 
     // Multiwindow ftw
-    let mut windows: HashMap<WindowId, window::View> = HashMap::new();
+    let mut windows: HashMap<WindowId, window::View<'_, Doc>> = HashMap::new();
     let mut pending_windows = Vec::new();
 
     pending_windows.push(window);
@@ -142,7 +148,7 @@ fn launch_with_window(window: crate::window::View<'static>) {
 
             Event::RedrawRequested(window_id) => {
                 windows.get_mut(&window_id).map(|window| {
-                    window.renderer.dom.resolve();
+                    window.renderer.dom.as_mut().resolve();
                     window.renderer.render(&mut window.scene);
                 });
             }
