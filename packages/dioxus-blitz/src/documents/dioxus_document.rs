@@ -1,9 +1,8 @@
-use blitz_dom::Document;
 use super::DocumentLike;
-
+use blitz_dom::Document;
 
 pub struct DioxusDocument {
-    inner: Document
+    inner: Document,
 }
 
 // Implement DocumentLike and required traits for DioxusDocument

@@ -1,12 +1,11 @@
+mod documents;
 mod waker;
 mod window;
-mod documents;
 
+use crate::documents::{DioxusDocument, DocumentLike, HtmlDocument};
 use crate::waker::{EventData, UserWindowEvent};
-use crate::documents::DocumentLike;
 
 use blitz::RenderState;
-use blitz_dom::Document;
 use dioxus::prelude::*;
 use muda::{MenuEvent, MenuId};
 use std::collections::HashMap;
@@ -39,7 +38,14 @@ pub fn launch_cfg_with_props<P: Clone + 'static, M: 'static>(
     props: P,
     cfg: Config,
 ) {
-    launch_with_window(crate::window::View::new(root, props, &cfg))
+    // Spin up the virtualdom
+    // We're going to need to hit it with a special waker
+    let mut vdom = VirtualDom::new_with_props(root, props);
+    vdom.rebuild_in_place();
+    let markup = dioxus_ssr::render(&vdom);
+
+    // TODO: Don't render dioxus via static html
+    launch_static_html_cfg(&markup, cfg)
 }
 
 pub fn launch_url(url: &str) {
@@ -71,12 +77,12 @@ pub fn launch_static_html(html: &str) {
 }
 
 pub fn launch_static_html_cfg(html: &str, cfg: Config) {
-    launch_with_window(crate::window::View::from_html(html, &cfg))
+    let document = HtmlDocument::from_html(html, &cfg);
+    let window = crate::window::View::new(document);
+    launch_with_window(window)
 }
 
-fn launch_with_window<Doc: DocumentLike + 'static>(
-    window: crate::window::View<'static, Doc>,
-) {
+fn launch_with_window<Doc: DocumentLike + 'static>(window: crate::window::View<'static, Doc>) {
     // Turn on the runtime and enter it
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
