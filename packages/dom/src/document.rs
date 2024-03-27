@@ -161,16 +161,14 @@ impl Document {
             display_outer: DisplayOuter::Block,
             child_idx,
             children: vec![],
-            node: node.clone(),
+            raw_dom_data: node.data,
             parent,
-            flow: FlowType::Block,
             cache: Cache::new(),
             data,
             unrounded_layout: Layout::new(),
             final_layout: Layout::new(),
             tree: slab_ptr,
             guard: self.guard.clone(),
-            additional_data: DomData::default(),
         };
 
         let entry = entry.insert(val);
@@ -394,4 +392,16 @@ impl Document {
     pub fn set_document(&mut self, content: String) {}
 
     pub fn add_element(&mut self) {}
+}
+
+impl AsRef<Document> for Document {
+    fn as_ref(&self) -> &Document {
+        self
+    }
+}
+
+impl AsMut<Document> for Document {
+    fn as_mut(&mut self) -> &mut Document {
+        self
+    }
 }

@@ -1,10 +1,11 @@
 use std::borrow::Cow;
 use std::cell::{Cell, Ref, RefCell};
+use std::rc::Rc;
 
 use atomic_refcell::AtomicRefCell;
-use html5ever::{local_name, tendril::StrTendril, Attribute, LocalName, QualName};
+use html5ever::{local_name, LocalName, QualName};
 use image::DynamicImage;
-use markup5ever_rcdom::{Handle, NodeData};
+use markup5ever_rcdom::Handle;
 use selectors::matching::QuirksMode;
 use slab::Slab;
 use std::fmt::Write;
@@ -35,64 +36,96 @@ pub enum DisplayOuter {
 
 // todo: might be faster to migrate this to ecs and split apart at a different boundary
 pub struct Node {
+    // The actual tree we belong to. This is unsafe!!
+    pub tree: *mut Slab<Node>,
+
     /// Our parent's ID
     pub parent: Option<usize>,
-
     /// Our Id
     pub id: usize,
-
     // Which child are we in our parent?
     pub child_idx: usize,
-
     // What are our children?
-    // Might want to use a linkedlist or something better at precise inserts/delets
     pub children: Vec<usize>,
 
-    // might want to make this weak
-    // pub dom_data: DomData,
-    pub node: Handle,
+    /// Node type (Element, TextNode, etc) specific data
+    pub raw_dom_data: NodeData,
 
-    // This little bundle of joy is our layout data from taffy and our style data from stylo
-    //
-    // todo: layout from new taffy
+    // This little bundle of joy is our style data from stylo and a lock guard that allows access to it
+    // TODO: See if guard can be hoisted to a higher level
     pub data: AtomicRefCell<ElementData>,
-
-    // need to make sure we sync this style and the other style...
-    pub style: Style,
-    pub display_outer: DisplayOuter,
-
-    pub cache: Cache,
-
-    pub unrounded_layout: Layout,
-
-    pub final_layout: Layout,
-
-    // todo: this takes up a lot of space and should not be here if it doesn't have to be
     pub guard: SharedRwLock,
 
-    pub flow: FlowType,
-
-    pub additional_data: DomData,
-
-    // The actual tree we belong to
-    // this is unsafe!!
-    pub tree: *mut Slab<Node>,
-}
-
-#[derive(Default)]
-pub struct DomData {
+    // Taffy layout data:
+    pub style: Style,
     pub hidden: bool,
-    pub style_attribute: Option<ServoArc<Locked<PropertyDeclarationBlock>>>,
-    pub image: Option<Arc<DynamicImage>>,
+    pub display_outer: DisplayOuter,
+    pub cache: Cache,
+    pub unrounded_layout: Layout,
+    pub final_layout: Layout,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum FlowType {
-    Block,
-    Flex,
-    Grid,
-    Inline,
-    Table,
+/// The different kinds of nodes in the DOM.
+#[derive(Debug, Clone)]
+pub enum NodeData {
+    /// The `Document` itself - the root node of a HTML document.
+    Document,
+
+    /// An element with attributes.
+    Element(ElementNodeData),
+
+    /// A text node.
+    Text(TextNodeData),
+
+    /// A comment.
+    Comment,// { contents: String },
+
+    // /// A `DOCTYPE` with name, public id, and system id. See
+    // /// [document type declaration on wikipedia][https://en.wikipedia.org/wiki/Document_type_declaration]
+    // Doctype { name: String, public_id: String, system_id: String },
+
+    // /// A Processing instruction.
+    // ProcessingInstruction { target: String, contents: String },
+}
+
+/// A tag attribute, e.g. `class="test"` in `<div class="test" ...>`.
+///
+/// The namespace on the attribute name is almost always ns!("").
+/// The tokenizer creates all attributes this way, but the tree
+/// builder will adjust certain attribute names inside foreign
+/// content (MathML, SVG).
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+pub struct Attribute {
+    /// The name of the attribute (e.g. the `class` in `<div class="test">`)
+    pub name: QualName,
+    /// The value of the attribute (e.g. the `"test"` in `<div class="test">`)
+    pub value: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ElementNodeData {
+    /// The elements tag name, namespace and prefix
+    pub name: QualName,
+    
+    /// The element's attributes
+    pub attrs: Vec<Attribute>,
+
+    /// The element's parsed style attribute (used by stylo)
+    pub style_attribute: Option<ServoArc<Locked<PropertyDeclarationBlock>>>,
+
+    /// The element's image content (applies \<img\> element's only)
+    pub image: Option<Arc<DynamicImage>>,
+
+    /// The element's template contents (\<template\> elements only)
+    pub template_contents: Option<usize>,
+
+    // /// Whether the node is a [HTML integration point] (https://html.spec.whatwg.org/multipage/#html-integration-point)
+    // pub mathml_annotation_xml_integration_point: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct TextNodeData {
+    pub content: String,
 }
 
 /*
@@ -101,7 +134,7 @@ pub enum FlowType {
 -----> Needs to happen only when styles are computed
 */
 
-type DomRefCell<T> = RefCell<T>;
+// type DomRefCell<T> = RefCell<T>;
 
 // pub struct DomData {
 //     // ... we can probs just get away with using the html5ever types directly. basically just using the servo dom, but without the bindings
@@ -148,17 +181,17 @@ impl Node {
     }
 
     pub fn is_element(&self) -> bool {
-        matches!(self.node.data, NodeData::Element { .. })
+        matches!(*self.raw_dom_data, NodeData::Element { .. })
     }
 
     pub fn is_text_node(&self) -> bool {
-        matches!(self.node.data, NodeData::Text { .. })
+        matches!(*self.raw_dom_data, NodeData::Text { .. })
     }
 
     pub fn node_debug_str(&self) -> String {
         let mut s = String::new();
 
-        match &self.node.data {
+        match *self.raw_dom_data {
             NodeData::Document => write!(s, "DOCUMENT"),
             NodeData::Doctype { name, .. } => write!(s, "DOCTYPE {name}"),
             NodeData::Text { contents } => {
@@ -195,8 +228,8 @@ impl Node {
     }
 
     pub fn attrs(&self) -> &RefCell<Vec<Attribute>> {
-        match &self.node.data {
-            NodeData::Element { attrs, .. } => attrs,
+        match *self.raw_dom_data {
+            NodeData::Element { attrs, .. } => &attrs,
             _ => panic!("not an element"),
         }
     }
@@ -218,7 +251,7 @@ impl Node {
     }
 
     fn write_text_content(&self, out: &mut String) {
-        match &self.node.data {
+        match *self.raw_dom_data {
             NodeData::Text { contents } => {
                 out.push_str(&contents.borrow().to_string());
             }
@@ -311,7 +344,7 @@ impl std::fmt::Debug for Node {
             .field("child_idx", &self.child_idx)
             .field("children", &self.children)
             // .field("style", &self.style)
-            .field("node", &self.node)
+            .field("node", &self.raw_dom_data)
             .field("data", &self.data)
             .field("unrounded_layout", &self.unrounded_layout)
             .field("final_layout", &self.final_layout)

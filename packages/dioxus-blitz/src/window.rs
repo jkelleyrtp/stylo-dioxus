@@ -1,5 +1,6 @@
 use super::Config;
 use crate::waker::UserWindowEvent;
+use crate::DocumentLike;
 use blitz::{RenderState, Renderer, Viewport};
 use blitz_dom::Document;
 use dioxus::dioxus_core::{ComponentFunction, VirtualDom};
@@ -21,8 +22,8 @@ use tao::{
 };
 use vello::Scene;
 
-pub(crate) struct View<'s> {
-    pub(crate) renderer: Renderer<'s, Window>,
+pub(crate) struct View<'s, Doc: DocumentLike> {
+    pub(crate) renderer: Renderer<'s, Window, Doc>,
     pub(crate) vdom: VirtualDom,
     pub(crate) scene: Scene,
     pub(crate) waker: Option<Waker>,
@@ -31,49 +32,19 @@ pub(crate) struct View<'s> {
     keyboard_modifiers: ModifiersState,
 }
 
-impl<'a> View<'a> {
-    pub(crate) fn new<P: 'static + Clone, M: 'static>(
-        root: impl ComponentFunction<P, M>,
-        props: P,
-        cfg: &Config,
-    ) -> Self {
-        // Spin up the virtualdom
-        // We're going to need to hit it with a special waker
-        let mut vdom = VirtualDom::new_with_props(root, props);
-        vdom.rebuild_in_place();
-        let markup = dioxus_ssr::render(&vdom);
-
-        // TODO: Don't render dioxus via static html
-        Self::from_html(&markup, cfg)
-    }
-
-    pub(crate) fn from_html(html: &str, cfg: &Config) -> Self {
-        // Spin up the virtualdom and include the default stylesheet
-        let mut dom = Document::new(Viewport::new((0, 0)).make_device());
-
-        // Set base url if configured
-        if let Some(url) = &cfg.base_url {
-            dom.set_base_url(&url);
-        }
-
-        // Include default and user-specified stylesheets
-        dom.add_stylesheet(include_str!("./default.css"));
-        for ss in &cfg.stylesheets {
-            dom.add_stylesheet(&ss);
-        }
-
-        // Populate dom with HTML
-        dom.write(&html);
-
+impl<'a, Doc: DocumentLike> View<'a, Doc> {
+    pub(crate) fn new(doc: Doc) -> Self {
         Self {
-            renderer: Renderer::new(dom),
+            renderer: Renderer::new(doc),
             vdom: VirtualDom::new(|| None),
             scene: Scene::new(),
             waker: None,
             keyboard_modifiers: Default::default(),
         }
     }
+}
 
+impl<'a, Doc: DocumentLike> View<'a, Doc> {
     pub(crate) fn poll(&mut self) {
         match &self.waker {
             None => {}
