@@ -13,7 +13,7 @@ use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
 use euclid::{Rect, Scale, Size2D};
 use fxhash::FxHashMap;
 use html5ever::{local_name, tendril::TendrilSink};
-use markup5ever_rcdom::NodeData;
+use crate::node::NodeData;
 use selectors::{
     matching::{ElementSelectorFlags, MatchingContext, VisitedHandlingMode},
     sink::Push,

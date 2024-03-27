@@ -3,9 +3,9 @@ use std::cell::{Cell, Ref, RefCell};
 use std::rc::Rc;
 
 use atomic_refcell::AtomicRefCell;
-use html5ever::{local_name, tendril::StrTendril, Attribute, LocalName, QualName};
+use html5ever::{local_name, LocalName, QualName};
 use image::DynamicImage;
-use markup5ever_rcdom::{Handle};
+use markup5ever_rcdom::Handle;
 use selectors::matching::QuirksMode;
 use slab::Slab;
 use std::fmt::Write;
@@ -36,48 +36,33 @@ pub enum DisplayOuter {
 
 // todo: might be faster to migrate this to ecs and split apart at a different boundary
 pub struct Node {
+    // The actual tree we belong to. This is unsafe!!
+    pub tree: *mut Slab<Node>,
+
     /// Our parent's ID
     pub parent: Option<usize>,
-
     /// Our Id
     pub id: usize,
-
     // Which child are we in our parent?
     pub child_idx: usize,
-
     // What are our children?
-    // Might want to use a linkedlist or something better at precise inserts/delets
     pub children: Vec<usize>,
 
-    // might want to make this weak
-    // pub dom_data: DomData,
-    pub raw_dom_data: Rc<NodeData>,
+    /// Node type (Element, TextNode, etc) specific data
+    pub raw_dom_data: NodeData,
 
-    // This little bundle of joy is our layout data from taffy and our style data from stylo
-    //
-    // todo: layout from new taffy
+    // This little bundle of joy is our style data from stylo and a lock guard that allows access to it
+    // TODO: See if guard can be hoisted to a higher level
     pub data: AtomicRefCell<ElementData>,
-
-    // need to make sure we sync this style and the other style...
-    pub style: Style,
-    pub display_outer: DisplayOuter,
-
-    pub cache: Cache,
-
-    pub unrounded_layout: Layout,
-
-    pub final_layout: Layout,
-
-    // todo: this takes up a lot of space and should not be here if it doesn't have to be
     pub guard: SharedRwLock,
 
-    pub flow: FlowType,
-
-    pub additional_data: DomData,
-
-    // The actual tree we belong to
-    // this is unsafe!!
-    pub tree: *mut Slab<Node>,
+    // Taffy layout data:
+    pub style: Style,
+    pub hidden: bool,
+    pub display_outer: DisplayOuter,
+    pub cache: Cache,
+    pub unrounded_layout: Layout,
+    pub final_layout: Layout,
 }
 
 /// The different kinds of nodes in the DOM.
@@ -86,59 +71,61 @@ pub enum NodeData {
     /// The `Document` itself - the root node of a HTML document.
     Document,
 
-    /// A `DOCTYPE` with name, public id, and system id. See
-    /// [document type declaration on wikipedia][dtd wiki].
-    ///
-    /// [dtd wiki]: https://en.wikipedia.org/wiki/Document_type_declaration
-    Doctype {
-        name: StrTendril,
-        public_id: StrTendril,
-        system_id: StrTendril,
-    },
+    /// An element with attributes.
+    Element(ElementNodeData),
 
     /// A text node.
-    Text { contents: RefCell<StrTendril> },
+    Text(TextNodeData),
 
     /// A comment.
-    Comment { contents: StrTendril },
+    Comment,// { contents: String },
 
-    /// An element with attributes.
-    Element {
-        name: QualName,
-        attrs: RefCell<Vec<Attribute>>,
+    // /// A `DOCTYPE` with name, public id, and system id. See
+    // /// [document type declaration on wikipedia][https://en.wikipedia.org/wiki/Document_type_declaration]
+    // Doctype { name: String, public_id: String, system_id: String },
 
-        /// For HTML \<template\> elements, the [template contents].
-        ///
-        /// [template contents]: https://html.spec.whatwg.org/multipage/#template-contents
-        template_contents: RefCell<Option<Handle>>,
-
-        /// Whether the node is a [HTML integration point].
-        ///
-        /// [HTML integration point]: https://html.spec.whatwg.org/multipage/#html-integration-point
-        mathml_annotation_xml_integration_point: bool,
-    },
-
-    /// A Processing instruction.
-    ProcessingInstruction {
-        target: StrTendril,
-        contents: StrTendril,
-    },
+    // /// A Processing instruction.
+    // ProcessingInstruction { target: String, contents: String },
 }
 
-#[derive(Default)]
-pub struct DomData {
-    pub hidden: bool,
+/// A tag attribute, e.g. `class="test"` in `<div class="test" ...>`.
+///
+/// The namespace on the attribute name is almost always ns!("").
+/// The tokenizer creates all attributes this way, but the tree
+/// builder will adjust certain attribute names inside foreign
+/// content (MathML, SVG).
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Debug)]
+pub struct Attribute {
+    /// The name of the attribute (e.g. the `class` in `<div class="test">`)
+    pub name: QualName,
+    /// The value of the attribute (e.g. the `"test"` in `<div class="test">`)
+    pub value: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ElementNodeData {
+    /// The elements tag name, namespace and prefix
+    pub name: QualName,
+    
+    /// The element's attributes
+    pub attrs: Vec<Attribute>,
+
+    /// The element's parsed style attribute (used by stylo)
     pub style_attribute: Option<ServoArc<Locked<PropertyDeclarationBlock>>>,
+
+    /// The element's image content (applies \<img\> element's only)
     pub image: Option<Arc<DynamicImage>>,
+
+    /// The element's template contents (\<template\> elements only)
+    pub template_contents: Option<usize>,
+
+    // /// Whether the node is a [HTML integration point] (https://html.spec.whatwg.org/multipage/#html-integration-point)
+    // pub mathml_annotation_xml_integration_point: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum FlowType {
-    Block,
-    Flex,
-    Grid,
-    Inline,
-    Table,
+#[derive(Debug, Clone)]
+pub struct TextNodeData {
+    pub content: String,
 }
 
 /*
@@ -147,7 +134,7 @@ pub enum FlowType {
 -----> Needs to happen only when styles are computed
 */
 
-type DomRefCell<T> = RefCell<T>;
+// type DomRefCell<T> = RefCell<T>;
 
 // pub struct DomData {
 //     // ... we can probs just get away with using the html5ever types directly. basically just using the servo dom, but without the bindings

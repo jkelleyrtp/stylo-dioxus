@@ -62,6 +62,7 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
     }
 
     fn create_pi(&mut self, target: StrTendril, data: StrTendril) -> Self::Handle {
+        // NOTE: html5ever does not call this method (only xml5ever does)
         unimplemented!()
     }
 
