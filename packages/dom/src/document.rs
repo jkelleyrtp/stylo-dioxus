@@ -163,14 +163,12 @@ impl Document {
             children: vec![],
             raw_dom_data: node.data,
             parent,
-            flow: FlowType::Block,
             cache: Cache::new(),
             data,
             unrounded_layout: Layout::new(),
             final_layout: Layout::new(),
             tree: slab_ptr,
             guard: self.guard.clone(),
-            additional_data: DomData::default(),
         };
 
         let entry = entry.insert(val);
