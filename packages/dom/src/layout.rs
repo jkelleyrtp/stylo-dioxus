@@ -19,6 +19,7 @@ use taffy::{
     prelude::{FlexDirection, NodeId},
     AvailableSpace, Dimension, Size, Style,
 };
+use markup5ever_rcdom::NodeData;
 
 impl Document {
     fn node_from_id(&self, node_id: taffy::prelude::NodeId) -> &Node {
@@ -72,14 +73,14 @@ impl LayoutPartialTree for Document {
                 char_height: 16.0,
             };
 
-            match &node.node.data {
-                markup5ever_rcdom::NodeData::Text { contents } => lay_text(
+            match *node.raw_dom_data {
+                NodeData::Text { contents } => lay_text(
                     inputs,
                     &node.style,
                     contents.borrow().as_ref(),
                     &font_metrics,
                 ),
-                markup5ever_rcdom::NodeData::Element { name, attrs, .. } => {
+                NodeData::Element { name, attrs, .. } => {
                     // Hide hidden nodes
                     if let Some(attr) = attrs
                         .borrow()
@@ -143,7 +144,7 @@ impl LayoutPartialTree for Document {
                         Display::None => taffy::LayoutOutput::HIDDEN,
                     }
                 }
-                markup5ever_rcdom::NodeData::Document => {
+                NodeData::Document => {
                     compute_block_layout(tree, node_id, inputs)
                 }
 
@@ -180,12 +181,10 @@ impl RoundTree for Document {
 
 impl PrintTree for Document {
     fn get_debug_label(&self, node_id: NodeId) -> &'static str {
-        use markup5ever_rcdom::NodeData;
-
         let node = &self.node_from_id(node_id);
         let style = &node.style;
 
-        match &node.node.data {
+        match *node.raw_dom_data {
             NodeData::Document => return "DOCUMENT",
             NodeData::Doctype { .. } => return "DOCTYPE",
             NodeData::Text { .. } => return node.node_debug_str().leak(),

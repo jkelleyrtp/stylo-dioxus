@@ -1,10 +1,11 @@
 use std::borrow::Cow;
 use std::cell::{Cell, Ref, RefCell};
+use std::rc::Rc;
 
 use atomic_refcell::AtomicRefCell;
 use html5ever::{local_name, tendril::StrTendril, Attribute, LocalName, QualName};
 use image::DynamicImage;
-use markup5ever_rcdom::{Handle, NodeData};
+use markup5ever_rcdom::{Handle};
 use selectors::matching::QuirksMode;
 use slab::Slab;
 use std::fmt::Write;
@@ -50,7 +51,7 @@ pub struct Node {
 
     // might want to make this weak
     // pub dom_data: DomData,
-    pub node: Handle,
+    pub raw_dom_data: Rc<NodeData>,
 
     // This little bundle of joy is our layout data from taffy and our style data from stylo
     //
@@ -77,6 +78,51 @@ pub struct Node {
     // The actual tree we belong to
     // this is unsafe!!
     pub tree: *mut Slab<Node>,
+}
+
+/// The different kinds of nodes in the DOM.
+#[derive(Debug, Clone)]
+pub enum NodeData {
+    /// The `Document` itself - the root node of a HTML document.
+    Document,
+
+    /// A `DOCTYPE` with name, public id, and system id. See
+    /// [document type declaration on wikipedia][dtd wiki].
+    ///
+    /// [dtd wiki]: https://en.wikipedia.org/wiki/Document_type_declaration
+    Doctype {
+        name: StrTendril,
+        public_id: StrTendril,
+        system_id: StrTendril,
+    },
+
+    /// A text node.
+    Text { contents: RefCell<StrTendril> },
+
+    /// A comment.
+    Comment { contents: StrTendril },
+
+    /// An element with attributes.
+    Element {
+        name: QualName,
+        attrs: RefCell<Vec<Attribute>>,
+
+        /// For HTML \<template\> elements, the [template contents].
+        ///
+        /// [template contents]: https://html.spec.whatwg.org/multipage/#template-contents
+        template_contents: RefCell<Option<Handle>>,
+
+        /// Whether the node is a [HTML integration point].
+        ///
+        /// [HTML integration point]: https://html.spec.whatwg.org/multipage/#html-integration-point
+        mathml_annotation_xml_integration_point: bool,
+    },
+
+    /// A Processing instruction.
+    ProcessingInstruction {
+        target: StrTendril,
+        contents: StrTendril,
+    },
 }
 
 #[derive(Default)]
@@ -148,17 +194,17 @@ impl Node {
     }
 
     pub fn is_element(&self) -> bool {
-        matches!(self.node.data, NodeData::Element { .. })
+        matches!(*self.raw_dom_data, NodeData::Element { .. })
     }
 
     pub fn is_text_node(&self) -> bool {
-        matches!(self.node.data, NodeData::Text { .. })
+        matches!(*self.raw_dom_data, NodeData::Text { .. })
     }
 
     pub fn node_debug_str(&self) -> String {
         let mut s = String::new();
 
-        match &self.node.data {
+        match *self.raw_dom_data {
             NodeData::Document => write!(s, "DOCUMENT"),
             NodeData::Doctype { name, .. } => write!(s, "DOCTYPE {name}"),
             NodeData::Text { contents } => {
@@ -195,8 +241,8 @@ impl Node {
     }
 
     pub fn attrs(&self) -> &RefCell<Vec<Attribute>> {
-        match &self.node.data {
-            NodeData::Element { attrs, .. } => attrs,
+        match *self.raw_dom_data {
+            NodeData::Element { attrs, .. } => &attrs,
             _ => panic!("not an element"),
         }
     }
@@ -218,7 +264,7 @@ impl Node {
     }
 
     fn write_text_content(&self, out: &mut String) {
-        match &self.node.data {
+        match *self.raw_dom_data {
             NodeData::Text { contents } => {
                 out.push_str(&contents.borrow().to_string());
             }
@@ -311,7 +357,7 @@ impl std::fmt::Debug for Node {
             .field("child_idx", &self.child_idx)
             .field("children", &self.children)
             // .field("style", &self.style)
-            .field("node", &self.node)
+            .field("node", &self.raw_dom_data)
             .field("data", &self.data)
             .field("unrounded_layout", &self.unrounded_layout)
             .field("final_layout", &self.final_layout)

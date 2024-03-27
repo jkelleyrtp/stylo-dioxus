@@ -72,7 +72,7 @@ impl crate::document::Document {
 
                 let Some(style) = data.styles.get_primary() else {
                     // HACK: hide whitespace-only text node children of flexbox and grid nodes from Taffy
-                    if let NodeData::Text { contents } = &node.node.data {
+                    if let NodeData::Text { contents } = *node.raw_dom_data {
                         node.display_outer = DisplayOuter::Inline;
                         let all_whitespace = contents.borrow().chars().all(|c| c.is_whitespace());
                         if all_whitespace
@@ -514,7 +514,7 @@ impl<'a> TNode for BlitzNode<'a> {
     }
 
     fn as_element(&self) -> Option<Self::ConcreteElement> {
-        match self.node.data {
+        match *self.raw_dom_data {
             NodeData::Element { .. } => Some(self),
             _ => None,
         }
@@ -605,7 +605,7 @@ impl<'a> selectors::Element for BlitzNode<'a> {
         local_name: &<Self::Impl as selectors::SelectorImpl>::BorrowedLocalName,
     ) -> bool {
         let data = self;
-        match &data.node.data {
+        match *data.raw_dom_data {
             NodeData::Element { name, .. } => &name.local == local_name,
             _ => false,
         }
@@ -616,7 +616,7 @@ impl<'a> selectors::Element for BlitzNode<'a> {
         ns: &<Self::Impl as selectors::SelectorImpl>::BorrowedNamespaceUrl,
     ) -> bool {
         let data = self;
-        match &data.node.data {
+        match *data.raw_dom_data {
             NodeData::Element { name, .. } => &name.ns == ns,
             _ => false,
         }
@@ -667,7 +667,7 @@ impl<'a> selectors::Element for BlitzNode<'a> {
     }
 
     fn is_link(&self) -> bool {
-        match self.node.data {
+        match *self.raw_dom_data {
             NodeData::Element { ref name, .. } => name.local == local_name!("a"),
             _ => false,
         }
@@ -699,7 +699,7 @@ impl<'a> selectors::Element for BlitzNode<'a> {
         let Some(al) = self.as_element() else {
             return false;
         };
-        let data = al.node.data.borrow();
+        let data = al.raw_dom_data.borrow();
         let NodeData::Element { name, attrs, .. } = data else {
             return false;
         };
@@ -809,7 +809,7 @@ impl<'a> TElement for BlitzNode<'a> {
 
     fn id(&self) -> Option<&style::Atom> {
         // None
-        let attrs = match &self.node.data {
+        let attrs = match *self.raw_dom_data {
             NodeData::Element { ref attrs, .. } => attrs,
             _ => return None,
         };
@@ -832,8 +832,7 @@ impl<'a> TElement for BlitzNode<'a> {
         let Some(al) = self.as_element() else {
             return;
         };
-        let data = &al.node.data;
-        let NodeData::Element { name, attrs, .. } = data else {
+        let NodeData::Element { name, attrs, .. } = *al.raw_dom_data else {
             return;
         };
         let attrs = attrs.borrow();
@@ -859,8 +858,7 @@ impl<'a> TElement for BlitzNode<'a> {
         let Some(al) = self.as_element() else {
             return;
         };
-        let data = &al.node.data;
-        let NodeData::Element { name, attrs, .. } = data else {
+        let NodeData::Element { name, attrs, .. } = *al.raw_dom_data else {
             return;
         };
         let attrs = attrs.borrow();
@@ -911,7 +909,7 @@ impl<'a> TElement for BlitzNode<'a> {
 
     fn has_data(&self) -> bool {
         // docment nodes don't have data, text nodes don't have data
-        match self.node.data {
+        match *self.raw_dom_data {
             NodeData::Element { .. } => true,
             _ => false,
         }
@@ -992,7 +990,7 @@ impl<'a> TElement for BlitzNode<'a> {
     }
 
     fn is_html_document_body_element(&self) -> bool {
-        match self.node.data {
+        match *self.raw_dom_data {
             NodeData::Document => true,
             _ => false,
         }
@@ -1012,7 +1010,7 @@ impl<'a> TElement for BlitzNode<'a> {
     ) -> &<style::selector_parser::SelectorImpl as selectors::parser::SelectorImpl>::BorrowedLocalName
     {
         let data = self;
-        match &data.node.data {
+        match *data.raw_dom_data {
             NodeData::Element { name, .. } => &name.local,
             g => panic!("Not an element {g:?}"),
         }
@@ -1021,7 +1019,7 @@ impl<'a> TElement for BlitzNode<'a> {
         fn namespace(&self)
     -> &<style::selector_parser::SelectorImpl as selectors::parser::SelectorImpl>::BorrowedNamespaceUrl{
         let data = self;
-        match &data.node.data {
+        match *data.raw_dom_data {
             NodeData::Element { name, .. } => &name.ns,
             _ => panic!("Not an element"),
         }

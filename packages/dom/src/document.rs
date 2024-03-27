@@ -161,7 +161,7 @@ impl Document {
             display_outer: DisplayOuter::Block,
             child_idx,
             children: vec![],
-            node: node.clone(),
+            raw_dom_data: node.data,
             parent,
             flow: FlowType::Block,
             cache: Cache::new(),

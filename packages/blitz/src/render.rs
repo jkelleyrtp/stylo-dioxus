@@ -494,7 +494,7 @@ where
             return;
         }
 
-        let NodeData::Element { name, attrs, .. } = &element.node.data else {
+        let NodeData::Element { name, attrs, .. } = &element.raw_dom_data else {
             return;
         };
 
@@ -538,7 +538,7 @@ where
         cx.draw_image(scene);
 
         for child in &cx.element.children {
-            match &self.dom.as_ref().tree()[*child].node.data {
+            match &self.dom.as_ref().tree()[*child].raw_dom_data {
                 NodeData::Element { .. } => self.render_element(scene, *child, cx.pos),
                 NodeData::Text { contents } => {
                     let (_layout, pos) = self.node_position(*child, cx.pos);
