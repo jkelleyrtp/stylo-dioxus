@@ -1,12 +1,9 @@
-use crate::node::DisplayOuter;
-use crate::{
-    node::{DomData, FlowType},
-    Node,
-};
+use crate::node::{DisplayOuter, ElementNodeData};
+use crate::{node::NodeData, Node};
 use atomic_refcell::AtomicRefCell;
 use html5ever::local_name;
 use html5ever::tendril::{Tendril, TendrilSink};
-use markup5ever_rcdom::{Handle, NodeData, RcDom};
+use markup5ever_rcdom::{Handle, RcDom};
 use selectors::{matching::QuirksMode, Element};
 use slab::Slab;
 use std::sync::Arc;
@@ -18,7 +15,6 @@ use std::{
 };
 use style::servo_arc::Arc as ServoArc;
 use style::{
-    data::ElementData,
     dom::{TDocument, TNode},
     media_queries::{Device, MediaList},
     selector_parser::SnapshotMap,
@@ -100,7 +96,7 @@ impl Document {
             .unwrap()
     }
 
-    fn resolve_url(&self, raw: &str) -> url::Url {
+    pub fn resolve_url(&self, raw: &str) -> url::Url {
         match &self.base_url {
             Some(base_url) => base_url.join(raw).unwrap(),
             None => url::Url::parse(raw).unwrap(),
@@ -148,11 +144,11 @@ impl Document {
         }
     }
 
-    pub fn add_node(&mut self, node: &Handle, child_idx: usize, parent: Option<usize>) -> usize {
+    pub fn on_add_node(&mut self, node_id: usize) {
         let slab_ptr = self.nodes.as_mut() as *mut Slab<Node>;
         let entry = self.nodes.vacant_entry();
         let id = entry.key();
-        let data: AtomicRefCell<ElementData> = Default::default();
+        let stylo_element_data: AtomicRefCell<Option<ElementData>> = Default::default();
         let style = Style::DEFAULT;
 
         let val = Node {
@@ -162,9 +158,10 @@ impl Document {
             child_idx,
             children: vec![],
             raw_dom_data: node.data,
+            hidden: false,
             parent,
             cache: Cache::new(),
-            data,
+            stylo_element_data,
             unrounded_layout: Layout::new(),
             final_layout: Layout::new(),
             tree: slab_ptr,
@@ -173,21 +170,17 @@ impl Document {
 
         let entry = entry.insert(val);
 
-        match &node.data {
-            NodeData::Element {
-                name,
-                attrs,
-                template_contents,
-                ..
-            } => {
-                // If the node has an ID, store it in the ID map.
-                if let Some(node_id) = attrs
-                    .borrow()
-                    .iter()
-                    .find(|attr| attr.name.local.as_ref() == "id")
-                {
-                    self.nodes_to_id.insert(node_id.value.to_string(), id);
-                }
+        let node = self.nodes[node_id];
+
+        match &node.raw_dom_data {
+            NodeData::Element(data) => {
+                let ElementNodeData {
+                    name,
+                    template_contents,
+                    ..
+                } = data;
+
+                
 
                 //
                 match name.local.as_ref() {
@@ -209,8 +202,11 @@ impl Document {
 
                     // Resolve external stylesheet
                     "link" => {
-                        if &*entry.attr(local_name!("rel")) == "stylesheet" {
-                            let raw_url = entry.attr(local_name!("href")).to_string();
+                        if entry.attr(local_name!("rel")) == Some("stylesheet") {
+                            let raw_url = entry
+                                .attr(local_name!("href"))
+                                .map(ToString::to_string)
+                                .unwrap_or_default();
                             let url = self.resolve_url(&raw_url);
 
                             match crate::util::fetch_string(url.as_str()) {
@@ -267,17 +263,20 @@ impl Document {
 
                     // todo: Load images
                     "img" => {
-                        let raw_src = entry.attr(local_name!("src")).to_string();
-                        if raw_src.len() > 0 {
-                            let src = self.resolve_url(&raw_src);
-                            let image_result = crate::util::fetch_image(src.as_str());
+                        if let Some(raw_src) = entry.attr(local_name!("src")) {
+                            if raw_src.len() > 0 {
+                                // let raw_src = raw_src.to_string();
+                                let src = self.resolve_url(&raw_src);
+                                let image_result = crate::util::fetch_image(src.as_str());
 
-                            match image_result {
-                                Ok(image) => {
-                                    self.nodes[id].additional_data.image = Some(Arc::new(image));
-                                }
-                                Err(_) => {
-                                    eprintln!("Error fetching image {}", src);
+                                match image_result {
+                                    Ok(image) => {
+                                        self.nodes[id].element_data_mut().unwrap().image =
+                                            Some(Arc::new(image));
+                                    }
+                                    Err(_) => {
+                                        eprintln!("Error fetching image {}", src);
+                                    }
                                 }
                             }
                         }

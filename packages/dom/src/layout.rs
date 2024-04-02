@@ -4,12 +4,14 @@
 //! However, in Blitz, we do a style pass then a layout pass.
 //! This is slower, yes, but happens fast enough that it's not a huge issue.
 
+use crate::node::NodeData;
 use crate::{
     document::Document,
     image::{image_measure_function, ImageContext},
     node::Node,
     text::{text_measure_function, FontMetrics, TextContext, WritingMode},
 };
+use html5ever::local_name;
 use taffy::{
     compute_block_layout, compute_cached_layout, compute_flexbox_layout, compute_grid_layout,
     compute_leaf_layout, compute_root_layout, prelude::*, round_layout, Cache, LayoutPartialTree,
@@ -19,7 +21,6 @@ use taffy::{
     prelude::{FlexDirection, NodeId},
     AvailableSpace, Dimension, Size, Style,
 };
-use markup5ever_rcdom::NodeData;
 
 impl Document {
     fn node_from_id(&self, node_id: taffy::prelude::NodeId) -> &Node {
@@ -73,42 +74,29 @@ impl LayoutPartialTree for Document {
                 char_height: 16.0,
             };
 
-            match *node.raw_dom_data {
-                NodeData::Text { contents } => lay_text(
-                    inputs,
-                    &node.style,
-                    contents.borrow().as_ref(),
-                    &font_metrics,
-                ),
-                NodeData::Element { name, attrs, .. } => {
+            match node.raw_dom_data {
+                NodeData::Text(data) => lay_text(inputs, &node.style, &data.content, &font_metrics),
+                NodeData::Element(element_data) => {
                     // Hide hidden nodes
-                    if let Some(attr) = attrs
-                        .borrow()
-                        .iter()
-                        .find(|attr| attr.name.local.as_ref() == "hidden")
-                    {
-                        if attr.value.to_string() == "true" || attr.value.to_string() == "" {
+                    if let Some(value) = node.attr(local_name!("hidden")) {
+                        if value == "hidden" || value == "" {
                             node.style.display = Display::None;
                             return taffy::LayoutOutput::HIDDEN;
                         }
                     }
 
                     // todo: need to handle shadow roots by actually descending into them
-                    if name.local.as_ref() == "input" {
-                        let attrs = &attrs.borrow();
-
+                    if *element_data.name.local == *"input" {
                         // if the input type is hidden, hide it
-                        if let Some(attr) =
-                            attrs.iter().find(|attr| attr.name.local.as_ref() == "type")
-                        {
-                            if attr.value.to_string() == "hidden" {
+                        if let Some(value) = node.attr(local_name!("type")) {
+                            if value == "hidden" {
                                 node.style.display = Display::None;
                                 return taffy::LayoutOutput::HIDDEN;
                             }
                         }
                     }
 
-                    if name.local.as_ref() == "img" {
+                    if *element_data.name.local == *"img" {
                         node.style.min_size = Size {
                             width: Dimension::Length(0.0),
                             height: Dimension::Length(0.0),
@@ -116,7 +104,7 @@ impl LayoutPartialTree for Document {
                         node.style.display = Display::Block;
 
                         // Get image's native size
-                        let image_data = match &node.additional_data.image {
+                        let image_data = match &element_data.image {
                             Some(image) => ImageContext {
                                 width: image.width() as f32,
                                 height: image.height() as f32,
@@ -144,9 +132,7 @@ impl LayoutPartialTree for Document {
                         Display::None => taffy::LayoutOutput::HIDDEN,
                     }
                 }
-                NodeData::Document => {
-                    compute_block_layout(tree, node_id, inputs)
-                }
+                NodeData::Document => compute_block_layout(tree, node_id, inputs),
 
                 _ => taffy::LayoutOutput::HIDDEN,
             }
@@ -184,9 +170,9 @@ impl PrintTree for Document {
         let node = &self.node_from_id(node_id);
         let style = &node.style;
 
-        match *node.raw_dom_data {
+        match node.raw_dom_data {
             NodeData::Document => return "DOCUMENT",
-            NodeData::Doctype { .. } => return "DOCTYPE",
+            // NodeData::Doctype { .. } => return "DOCTYPE",
             NodeData::Text { .. } => return node.node_debug_str().leak(),
             NodeData::Comment { .. } => return "COMMENT",
             NodeData::Element { .. } => {
@@ -201,7 +187,7 @@ impl PrintTree for Document {
                 };
                 return format!("{} ({})", node.node_debug_str(), display).leak();
             }
-            NodeData::ProcessingInstruction { .. } => return "PROCESSING INSTRUCTION",
+            // NodeData::ProcessingInstruction { .. } => return "PROCESSING INSTRUCTION",
         };
     }
 
