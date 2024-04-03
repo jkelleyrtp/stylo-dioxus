@@ -407,7 +407,7 @@ fn parses_some_html() {
     use euclid::{Scale, Size2D};
     use style::media_queries::{Device, MediaType};
 
-    let html = "<html><body><h1>hello world</h1></body></html>";
+    let html = "<!DOCTYPE html><html><body><h1>hello world</h1></body></html>";
     let viewport_size = Size2D::new(800.0, 600.0);
     let device_pixel_ratio = Scale::new(1.0);
 
