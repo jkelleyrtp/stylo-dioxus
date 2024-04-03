@@ -175,14 +175,8 @@ impl Document {
         let size = self.stylist.device().au_viewport_size();
 
         let available_space = taffy::Size {
-            // width: AvailableSpace::MaxContent,
-            // height: AvailableSpace::Definite(10000000.0),
-            // width: AvailableSpace::Definite(dbg!(1200.0)),
-            // height: AvailableSpace::Definite(dbg!(2000.0)),
-            // };
             width: AvailableSpace::Definite(size.width.to_f32_px()),
             height: AvailableSpace::Definite(size.height.to_f32_px()),
-            // height: AvailableSpace::Definite(1000000.0),
         };
 
         let root_node_id = taffy::NodeId::from(self.root_element().id);
