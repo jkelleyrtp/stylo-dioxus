@@ -1010,7 +1010,7 @@ impl std::hash::Hash for BlitzNode<'_> {
 /// todo: actually implement this
 pub struct RegisteredPaintersImpl;
 impl RegisteredSpeculativePainters for RegisteredPaintersImpl {
-    fn get(&self, name: &Atom) -> Option<&dyn RegisteredSpeculativePainter> {
+    fn get(&self, _name: &Atom) -> Option<&dyn RegisteredSpeculativePainter> {
         None
     }
 }
@@ -1070,7 +1070,7 @@ where
 
 #[test]
 fn assert_size_of_equals() {
-    use std::mem;
+    // use std::mem;
 
     // fn assert_layout<E>() {
     //     assert_eq!(

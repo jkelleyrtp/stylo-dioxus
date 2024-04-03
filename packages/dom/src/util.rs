@@ -1,4 +1,4 @@
-use std::io::{BufRead, BufReader, Cursor, Read};
+use std::io::{Cursor, Read};
 
 use image::DynamicImage;
 use markup5ever_rcdom::{Handle, NodeData};
@@ -32,13 +32,14 @@ pub(crate) fn fetch_string(url: &str) -> Result<String, ureq::Error> {
     fetch_blob(url).map(|vec| String::from_utf8(vec).expect("Invalid UTF8"))
 }
 
-pub(crate) fn fetch_buffered_stream(
-    url: &str,
-) -> Result<impl BufRead + Read + Send + Sync, ureq::Error> {
-    let resp = ureq::get(url).set("User-Agent", USER_AGENT).call()?;
-    Ok(BufReader::new(resp.into_reader().take(FILE_SIZE_LIMIT)))
-}
+// pub(crate) fn fetch_buffered_stream(
+//     url: &str,
+// ) -> Result<impl BufRead + Read + Send + Sync, ureq::Error> {
+//     let resp = ureq::get(url).set("User-Agent", USER_AGENT).call()?;
+//     Ok(BufReader::new(resp.into_reader().take(FILE_SIZE_LIMIT)))
+// }
 
+#[allow(unused)]
 pub(crate) enum ImageFetchErr {
     FetchErr(ureq::Error),
     ImageError(image::error::ImageError),
@@ -64,7 +65,7 @@ pub(crate) fn fetch_image(url: &str) -> Result<DynamicImage, ImageFetchErr> {
 }
 
 // Debug print an RcDom
-pub(crate) fn walk_rc_dom(indent: usize, handle: &Handle) {
+pub fn walk_rc_dom(indent: usize, handle: &Handle) {
     let node = handle;
     for _ in 0..indent {
         print!(" ");

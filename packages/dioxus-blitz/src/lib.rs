@@ -2,7 +2,7 @@ mod documents;
 mod waker;
 mod window;
 
-use crate::documents::{DioxusDocument, DocumentLike, HtmlDocument};
+use crate::documents::{DocumentLike, HtmlDocument};
 use crate::waker::{EventData, UserWindowEvent};
 
 use blitz::RenderState;
@@ -145,6 +145,11 @@ fn launch_with_window<Doc: DocumentLike + 'static>(window: crate::window::View<'
             Event::UserEvent(UserWindowEvent(EventData::Poll, id)) => {
                 windows.get_mut(&id).map(|view| view.poll());
             }
+            // Event::UserEvent(_redraw) => {
+            //     for (_, view) in windows.iter() {
+            //         view.request_redraw();
+            //     }
+            // }
 
             Event::NewEvents(_) => {
                 for id in windows.keys() {
@@ -157,12 +162,6 @@ fn launch_with_window<Doc: DocumentLike + 'static>(window: crate::window::View<'
                     window.renderer.dom.as_mut().resolve();
                     window.renderer.render(&mut window.scene);
                 });
-            }
-
-            Event::UserEvent(_redraw) => {
-                for (_, view) in windows.iter() {
-                    view.request_redraw();
-                }
             }
 
             Event::Suspended => {

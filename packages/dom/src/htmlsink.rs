@@ -1,6 +1,6 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 use std::sync::Arc;
-use std::{borrow::Cow, pin::Pin};
 
 use crate::node::{Attribute, DisplayOuter, ElementNodeData, Node, NodeData, TextNodeData};
 use crate::Document;
@@ -10,16 +10,9 @@ use html5ever::{
     tree_builder::{ElementFlags, NodeOrText, QuirksMode, TreeSink},
     ExpandedName, QualName,
 };
-use selectors::Element;
 use slab::Slab;
-use style::dom::TElement;
 use style::Atom;
-use style::{
-    dom::{TDocument, TNode},
-    shared_lock::SharedRwLock,
-};
 use taffy::{Cache, Layout};
-
 
 /// Convert an html5ever Attribute which uses tendril for its value to a blitz Attribute
 /// which uses String.
@@ -52,7 +45,7 @@ impl<'a> DocumentHtmlParser<'a> {
         }
     }
 
-    pub fn parse_into_doc<'d> (doc: &'d mut Document, html: &str) -> &'d mut Document {
+    pub fn parse_into_doc<'d>(doc: &'d mut Document, html: &str) -> &'d mut Document {
         let mut sink = Self::new(doc);
         sink.create_node(NodeData::Document);
         html5ever::parse_document(sink, Default::default())
@@ -119,23 +112,6 @@ impl<'a> DocumentHtmlParser<'a> {
 
     fn last_child(&mut self, parent_id: usize) -> Option<usize> {
         self.node(parent_id).children.last().copied()
-    }
-
-    fn previous_child(&mut self, parent_id: usize, target_id: usize) -> Option<usize> {
-        let children = &self.node(parent_id).children;
-        match children.iter().position(|cid| *cid == target_id) {
-            None | Some(0) => None,
-            Some(idx) => Some(children[idx - 1]),
-        }
-    }
-
-    fn previous_sibling(&mut self, target_id: usize) -> Option<usize> {
-        let parent_id = self.node(target_id).parent?;
-        let children = &self.node(parent_id).children;
-        match children.iter().position(|cid| *cid == target_id) {
-            None | Some(0) => None,
-            Some(idx) => Some(children[idx - 1]),
-        }
     }
 
     fn load_linked_stylesheet(&mut self, target_id: usize) {
@@ -248,7 +224,8 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
         attrs: Vec<html5ever::Attribute>,
         _flags: ElementFlags,
     ) -> Self::Handle {
-        let id_attr_atom = attrs.iter()
+        let id_attr_atom = attrs
+            .iter()
             .find(|attr| &attr.name.local == "id")
             .map(|attr| Atom::from(attr.value.as_ref()));
         let mut data = ElementNodeData {
