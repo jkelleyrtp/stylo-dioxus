@@ -207,18 +207,6 @@ impl crate::document::Document {
                 // TODO: smarter cache invalidation
                 node.cache.clear();
 
-                // // now we need to override the style if there is a style attribute
-                // let style_attr = node
-                //     .attrs()
-                //     .borrow()
-                //     .iter()
-                //     .find(|attr| attr.name.local.as_ref() == "style");
-
-                // if let Some(style_attr) = style_attr {
-                //     // style::parser::ParserContext
-                // }
-                // }
-
                 // would like to change this not require a clone, but requires some refactoring
                 (display, node.children.clone())
             };
@@ -235,46 +223,6 @@ impl crate::document::Document {
                 // Mutate source child array
                 self.nodes.get_mut(*child).unwrap().children = children.clone();
             }
-
-            // // Reach up to our parent and set our flex basis to auto if we're in a flex layout
-            // if let Some(parent) = parent {
-            //     let is_flex = {
-            //         let parent = self.nodes.get_mut(parent).unwrap();
-            //         let parent_data = parent.data.borrow();
-
-            //         if let Some(parent_style) = parent_data.styles.get_primary() {
-            //             let parent_display = parent_style.get_box().display;
-            //             match parent_display.inside() {
-            //                 style::values::specified::box_::DisplayInside::Flex => true,
-            //                 style::values::specified::box_::DisplayInside::None => false,
-            //                 style::values::specified::box_::DisplayInside::Contents => false,
-            //                 style::values::specified::box_::DisplayInside::Flow => false,
-            //                 style::values::specified::box_::DisplayInside::FlowRoot => false,
-            //                 style::values::specified::box_::DisplayInside::Table => false,
-            //                 style::values::specified::box_::DisplayInside::TableRowGroup => false,
-            //                 style::values::specified::box_::DisplayInside::TableColumn => false,
-            //                 style::values::specified::box_::DisplayInside::TableColumnGroup => {
-            //                     false
-            //                 }
-            //                 style::values::specified::box_::DisplayInside::TableHeaderGroup => {
-            //                     false
-            //                 }
-            //                 style::values::specified::box_::DisplayInside::TableFooterGroup => {
-            //                     false
-            //                 }
-            //                 style::values::specified::box_::DisplayInside::TableRow => false,
-            //                 style::values::specified::box_::DisplayInside::TableCell => false,
-            //             }
-            //         } else {
-            //             false
-            //         }
-            //     };
-
-            //     if is_flex {
-            //         // self.nodes[child].style.flex_basis = taffy::Dimension::Auto;
-            //         self.nodes[child].style.display = taffy::Display::Flex;
-            //     }
-            // }
 
             self.flush_styles_to_layout(children, Some(*child), display);
         }
@@ -419,7 +367,7 @@ impl<'a> TDocument for BlitzNode<'a> {
     }
 
     fn is_html_document(&self) -> bool {
-        true //self.id == 1
+        self.id == 1
     }
 
     fn quirks_mode(&self) -> QuirksMode {
