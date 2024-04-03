@@ -264,6 +264,9 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
         let id = self.create_node(NodeData::Element(data));
         let node = self.node(id);
 
+        // Initialise style data
+        *node.stylo_element_data.borrow_mut() = Some(Default::default());
+
         // If the node has an "id" attribute, store it in the ID map.
         if let Some(id_attr) = node.attr(local_name!("id")) {
             self.doc.nodes_to_id.insert(id_attr.to_string(), id);

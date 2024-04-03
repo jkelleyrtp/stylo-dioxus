@@ -93,7 +93,7 @@ impl Document {
         let node = &mut self.nodes[target_id];
         node.child_idx = child_idx;
 
-        println!("{} {} {:?} {:?}", "  ".repeat(level), target_id, node.parent, node.children);
+        // println!("{} {} {:?} {:?}", "  ".repeat(level), target_id, node.parent, node.children);
 
         for (i, child_id) in node.children.clone().iter().enumerate() {
             self.flush_child_indexes(*child_id, i, level + 1)
@@ -309,22 +309,14 @@ impl Document {
 
     /// Restyle the tree and then relayout it
     pub fn resolve(&mut self) {
-
-        println!("RESOLVE");
         // we need to resolve stylist first since it will need to drive our layout bits
         self.resolve_stylist();
-
-        println!("STYLIST DONE");
 
         // Merge stylo into taffy
         self.flush_styles_to_layout(vec![self.root_element().id], None, taffy::Display::Block);
 
-        println!("FLUSH TO TAFFY DONE");
-
         // Next we resolve layout with the data resolved by stlist
         self.resolve_layout();
-
-        println!("LAYOUT DONE");
     }
 
     // Takes (x, y) co-ordinates (relative to the )

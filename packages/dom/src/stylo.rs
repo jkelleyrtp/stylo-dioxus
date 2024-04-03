@@ -368,20 +368,14 @@ impl crate::document::Document {
             ua_or_user: &guard.read(),
         };
 
-        println!("GUARD");
-
         let root = TDocument::as_node(&&self.nodes[0])
             .first_element_child()
             .unwrap()
             .as_element()
             .unwrap();
 
-        println!("ROOT");
-
         self.stylist
             .flush(&guards, Some(root), Some(&self.snapshots));
-
-        println!("FLUSH DONE");
 
         // Build the style context used by the style traversal
         let context = SharedStyleContext {
@@ -398,13 +392,10 @@ impl crate::document::Document {
 
         // components/layout_2020/lib.rs:983
         let root = self.root_element();
-        dbg!(root);
+        // dbg!(root);
         let token = RecalcStyle::pre_traverse(root, &context);
 
-        println!("PRE TRAVERSE DONE");
-
         if token.should_traverse() {
-            println!("SHOULD TRAVERSE");
             // Style the elements, resolving their data
             let traverser = RecalcStyle::new(context);
             style::driver::traverse_dom(&traverser, token, None);
@@ -1049,13 +1040,13 @@ where
         node: E::ConcreteNode,
         note_child: F,
     ) {
-        // Don't process textnodees in this traversala
+        // Don't process textnodees in this traversal
         if node.is_text_node() {
             return;
         }
 
         let el = node.as_element().unwrap();
-        let mut data = el.mutate_data().unwrap();
+        let mut data = unsafe { el.ensure_data() };
         recalc_style_at(self, traversal_data, context, el, &mut data, note_child);
 
         // Gets set later on
