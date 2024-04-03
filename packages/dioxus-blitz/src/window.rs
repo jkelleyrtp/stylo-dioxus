@@ -1,12 +1,9 @@
-use super::Config;
 use crate::waker::UserWindowEvent;
 use crate::DocumentLike;
 use blitz::{RenderState, Renderer, Viewport};
-use blitz_dom::Document;
-use dioxus::dioxus_core::{ComponentFunction, VirtualDom};
-use dioxus_ssr::config;
+use dioxus::dioxus_core::VirtualDom;
 use futures_util::{pin_mut, FutureExt};
-use muda::{AboutMetadata, Menu, MenuId, MenuItem, PredefinedMenuItem, Submenu};
+
 use std::sync::Arc;
 use std::task::Waker;
 use tao::dpi::LogicalSize;
@@ -21,6 +18,9 @@ use tao::{
     window::{Window, WindowBuilder},
 };
 use vello::Scene;
+
+#[cfg(not(target_os = "macos"))]
+use muda::{AboutMetadata, Menu, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 
 pub(crate) struct View<'s, Doc: DocumentLike> {
     pub(crate) renderer: Renderer<'s, Window, Doc>,
@@ -83,10 +83,11 @@ impl<'a, Doc: DocumentLike> View<'a, Doc> {
     pub fn handle_window_event(&mut self, event: WindowEvent) {
         match event {
             WindowEvent::MouseInput {
-                device_id,
+                // device_id,
                 state,
                 button,
-                modifiers,
+                // modifiers,
+                ..
             } => {
                 if state == ElementState::Pressed && button == MouseButton::Left {
                     self.renderer.click()
@@ -167,22 +168,24 @@ impl<'a, Doc: DocumentLike> View<'a, Doc> {
             WindowEvent::ReceivedImeText(_) => {}
             WindowEvent::Focused(_) => {}
             WindowEvent::CursorMoved {
-                device_id,
+                // device_id,
                 position,
-                modifiers,
+                // modifiers,
+                ..
             } => {
                 let tao::dpi::LogicalPosition::<f32> { x, y } = position.to_logical(2.0);
                 if self.renderer.mouse_move(x, y) {
                     self.request_redraw();
                 }
             }
-            WindowEvent::CursorEntered { device_id } => {}
-            WindowEvent::CursorLeft { device_id } => {}
+            WindowEvent::CursorEntered { /*device_id*/.. } => {}
+            WindowEvent::CursorLeft { /*device_id*/.. } => {}
             WindowEvent::MouseWheel {
-                device_id,
+                // device_id,
                 delta,
-                phase,
-                modifiers,
+                // phase,
+                // modifiers,
+                ..
             } => {
                 match delta {
                     tao::event::MouseScrollDelta::LineDelta(_, y) => {
@@ -197,19 +200,22 @@ impl<'a, Doc: DocumentLike> View<'a, Doc> {
             }
 
             WindowEvent::TouchpadPressure {
-                device_id,
-                pressure,
-                stage,
+                // device_id,
+                // pressure,
+                // stage,
+                ..
             } => {}
             WindowEvent::AxisMotion {
-                device_id,
-                axis,
-                value,
+                // device_id,
+                // axis,
+                // value,
+                ..
             } => {}
             WindowEvent::Touch(_) => {}
             WindowEvent::ScaleFactorChanged {
-                scale_factor,
-                new_inner_size,
+                // scale_factor,
+                // new_inner_size,
+                ..
             } => {}
             WindowEvent::ThemeChanged(_) => {}
             WindowEvent::DecorationsClick => {}
@@ -272,16 +278,19 @@ impl<'a, Doc: DocumentLike> View<'a, Doc> {
     }
 }
 
+#[cfg(not(target_os = "macos"))]
 fn build_menu() -> Menu {
     let mut menu = Menu::new();
 
     // Build the about section
     let mut about = Submenu::new("About", true);
 
-    about.append_items(&[
-        &PredefinedMenuItem::about("Dioxus".into(), Option::from(AboutMetadata::default())),
-        &MenuItem::with_id(MenuId::new("dev.show_layout"), "Show layout", true, None),
-    ]);
+    about
+        .append_items(&[
+            &PredefinedMenuItem::about("Dioxus".into(), Option::from(AboutMetadata::default())),
+            &MenuItem::with_id(MenuId::new("dev.show_layout"), "Show layout", true, None),
+        ])
+        .unwrap();
 
     menu.append(&about).unwrap();
 

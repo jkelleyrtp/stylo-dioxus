@@ -1,26 +1,18 @@
 //! Enable the dom to participate in styling by servo
 //!
 
-use crate::node::{DisplayOuter, ElementNodeData, Node};
-
-use std::{
-    borrow::{Borrow, Cow},
-    cell::{Cell, RefCell},
-    collections::HashMap,
-};
+use crate::node::{DisplayOuter, Node};
 
 use crate::node::NodeData;
-use atomic_refcell::{AtomicRef, AtomicRefCell, AtomicRefMut};
-use euclid::{Rect, Scale, Size2D};
-use fxhash::FxHashMap;
-use html5ever::{local_name, tendril::TendrilSink, LocalName, Namespace};
+use atomic_refcell::{AtomicRef, AtomicRefMut};
+use html5ever::{local_name, LocalName, Namespace};
 use selectors::{
     matching::{ElementSelectorFlags, MatchingContext, VisitedHandlingMode},
     sink::Push,
     Element, OpaqueElement,
 };
 use slab::Slab;
-use string_cache::{DefaultAtom, EmptyStaticAtomSet, StaticAtomSet};
+use style::values::specified::box_::DisplayOutside;
 use style::values::specified::TextAlignKeyword;
 use style::CaseSensitivityExt;
 use style::{
@@ -29,31 +21,24 @@ use style::{
         QuirksMode, RegisteredSpeculativePainter, RegisteredSpeculativePainters,
         SharedStyleContext, StyleContext,
     },
-    data::ElementData,
     dom::{LayoutIterator, NodeInfo, OpaqueNode, TDocument, TElement, TNode, TShadowRoot},
     global_style_data::GLOBAL_STYLE_DATA,
-    media_queries::MediaType,
-    media_queries::{Device as StyleDevice, MediaList},
     properties::{
-        style_structs::{Border, Box as BoxStyle, Margin, Padding, Position},
-        PropertyDeclarationBlock, PropertyId, StyleBuilder,
+        style_structs::{Box as BoxStyle, Position},
+        PropertyDeclarationBlock,
     },
     selector_parser::SelectorImpl,
     servo_arc::{Arc, ArcBorrow},
     shared_lock::{Locked, SharedRwLock, StylesheetGuards},
-    sharing::StyleSharingCandidate,
-    stylesheets::{AllowImportRules, DocumentStyleSheet, Origin, Stylesheet},
-    stylist::Stylist,
     thread_state::ThreadState,
     traversal::{DomTraversal, PerLevelTraversalData},
     traversal_flags::TraversalFlags,
     values::{AtomIdent, GenericAtomIdent},
     Atom,
 };
-use style::{data, values::specified::box_::DisplayOutside};
 use style_traits::dom::ElementState;
+use taffy::prelude::Style;
 use taffy::Display;
-use taffy::{prelude::Style, LengthPercentageAuto};
 
 use super::stylo_to_taffy;
 
@@ -70,11 +55,13 @@ impl crate::document::Document {
             let (display, mut children) = {
                 let node = self.nodes.get_mut(*child).unwrap();
                 let stylo_element_data = node.stylo_element_data.borrow();
-                let primary_styles = stylo_element_data.and_then(|data| data.styles.get_primary());
+                let primary_styles = stylo_element_data
+                    .as_ref()
+                    .and_then(|data| data.styles.get_primary());
 
                 let Some(style) = primary_styles else {
                     // HACK: hide whitespace-only text node children of flexbox and grid nodes from Taffy
-                    if let NodeData::Text(data) = node.raw_dom_data {
+                    if let NodeData::Text(data) = &node.raw_dom_data {
                         node.display_outer = DisplayOuter::Inline;
                         let all_whitespace = data.content.chars().all(|c| c.is_whitespace());
                         if all_whitespace
@@ -97,7 +84,7 @@ impl crate::document::Document {
                     right,
                     bottom,
                     left,
-                    z_index,
+                    // z_index,
                     flex_direction,
                     flex_wrap,
                     justify_content,
@@ -106,7 +93,7 @@ impl crate::document::Document {
                     flex_grow,
                     flex_shrink,
                     align_self,
-                    order,
+                    // order,
                     flex_basis,
                     width,
                     min_width,
@@ -114,9 +101,10 @@ impl crate::document::Document {
                     height,
                     min_height,
                     max_height,
-                    box_sizing,
+                    // box_sizing,
                     column_gap,
                     aspect_ratio,
+                    ..
                 } = style.get_position();
 
                 let BoxStyle {
@@ -124,23 +112,24 @@ impl crate::document::Document {
                     _servo_overflow_clip_box,
                     display: stylo_display,
                     position,
-                    float,
-                    clear,
-                    vertical_align,
+                    // float,
+                    // clear,
+                    // vertical_align,
                     overflow_x,
                     overflow_y,
-                    transform,
-                    rotate,
-                    scale,
-                    translate,
-                    perspective,
-                    perspective_origin,
-                    backface_visibility,
-                    transform_style,
-                    transform_origin,
-                    container_type,
-                    container_name,
-                    original_display,
+                    // transform,
+                    // rotate,
+                    // scale,
+                    // translate,
+                    // perspective,
+                    // perspective_origin,
+                    // backface_visibility,
+                    // transform_style,
+                    // transform_origin,
+                    // container_type,
+                    // container_name,
+                    // original_display,
+                    ..
                 }: &BoxStyle = style.get_box();
 
                 let display = stylo_to_taffy::display(*stylo_display);
@@ -309,8 +298,9 @@ impl crate::document::Document {
                     // HACK: Set flexbox alignment based on value of text-align property
                     // This fixes some but not all <center> tags
                     let stylo_element_data = node.stylo_element_data.borrow();
-                    let primary_styles =
-                        stylo_element_data.and_then(|data| data.styles.get_primary());
+                    let primary_styles = stylo_element_data
+                        .as_ref()
+                        .and_then(|data| data.styles.get_primary());
                     if let Some(style) = primary_styles {
                         node.style.justify_content = Some(match style.clone_text_align() {
                             TextAlignKeyword::Start => taffy::JustifyContent::Start,
@@ -335,8 +325,9 @@ impl crate::document::Document {
                         }
 
                         let stylo_element_data = child.stylo_element_data.borrow();
-                        let primary_styles =
-                            stylo_element_data.and_then(|data| data.styles.get_primary());
+                        let primary_styles = stylo_element_data
+                            .as_ref()
+                            .and_then(|data| data.styles.get_primary());
 
                         if let Some(style) = primary_styles {
                             use style::values::generics::box_::VerticalAlign;
@@ -377,14 +368,20 @@ impl crate::document::Document {
             ua_or_user: &guard.read(),
         };
 
+        println!("GUARD");
+
         let root = TDocument::as_node(&&self.nodes[0])
             .first_element_child()
             .unwrap()
             .as_element()
             .unwrap();
 
+        println!("ROOT");
+
         self.stylist
             .flush(&guards, Some(root), Some(&self.snapshots));
+
+        println!("FLUSH DONE");
 
         // Build the style context used by the style traversal
         let context = SharedStyleContext {
@@ -401,10 +398,13 @@ impl crate::document::Document {
 
         // components/layout_2020/lib.rs:983
         let root = self.root_element();
-        // dbg!(root);
+        dbg!(root);
         let token = RecalcStyle::pre_traverse(root, &context);
 
+        println!("PRE TRAVERSE DONE");
+
         if token.should_traverse() {
+            println!("SHOULD TRAVERSE");
             // Style the elements, resolving their data
             let traverser = RecalcStyle::new(context);
             style::driver::traverse_dom(&traverser, token, None);
@@ -428,7 +428,7 @@ impl<'a> TDocument for BlitzNode<'a> {
     }
 
     fn is_html_document(&self) -> bool {
-        self.id == 1
+        true//self.id == 1
     }
 
     fn quirks_mode(&self) -> QuirksMode {
@@ -606,7 +606,7 @@ impl<'a> selectors::Element for BlitzNode<'a> {
     }
 
     fn has_local_name(&self, local_name: &LocalName) -> bool {
-        self.raw_dom_data.is_element_with_tag_name(*local_name)
+        self.raw_dom_data.is_element_with_tag_name(local_name)
     }
 
     fn has_namespace(&self, ns: &Namespace) -> bool {
@@ -614,16 +614,16 @@ impl<'a> selectors::Element for BlitzNode<'a> {
     }
 
     fn is_same_type(&self, other: &Self) -> bool {
-        false
+        self.local_name() == other.local_name() && self.namespace() == other.namespace()
     }
 
     fn attr_matches(
         &self,
-        ns: &selectors::attr::NamespaceConstraint<
+        _ns: &selectors::attr::NamespaceConstraint<
             &<Self::Impl as selectors::SelectorImpl>::NamespaceUrl,
         >,
         local_name: &<Self::Impl as selectors::SelectorImpl>::LocalName,
-        operation: &selectors::attr::AttrSelectorOperation<
+        _operation: &selectors::attr::AttrSelectorOperation<
             &<Self::Impl as selectors::SelectorImpl>::AttrValue,
         >,
     ) -> bool {
@@ -639,26 +639,27 @@ impl<'a> selectors::Element for BlitzNode<'a> {
 
     fn match_non_ts_pseudo_class(
         &self,
-        pc: &<Self::Impl as selectors::SelectorImpl>::NonTSPseudoClass,
-        context: &mut MatchingContext<Self::Impl>,
+        _pc: &<Self::Impl as selectors::SelectorImpl>::NonTSPseudoClass,
+        _context: &mut MatchingContext<Self::Impl>,
     ) -> bool {
         false
     }
 
     fn match_pseudo_element(
         &self,
-        pe: &<Self::Impl as selectors::SelectorImpl>::PseudoElement,
-        context: &mut MatchingContext<Self::Impl>,
+        _pe: &<Self::Impl as selectors::SelectorImpl>::PseudoElement,
+        _context: &mut MatchingContext<Self::Impl>,
     ) -> bool {
         false
     }
 
-    fn apply_selector_flags(&self, flags: ElementSelectorFlags) {
+    fn apply_selector_flags(&self, _flags: ElementSelectorFlags) {
         // unimplemented!()
     }
 
     fn is_link(&self) -> bool {
-        self.raw_dom_data.is_element_with_tag_name(local_name!("a"))
+        self.raw_dom_data
+            .is_element_with_tag_name(&local_name!("a"))
     }
 
     fn is_html_slot_element(&self) -> bool {
@@ -697,12 +698,12 @@ impl<'a> selectors::Element for BlitzNode<'a> {
 
     fn imported_part(
         &self,
-        name: &<Self::Impl as selectors::SelectorImpl>::Identifier,
+        _name: &<Self::Impl as selectors::SelectorImpl>::Identifier,
     ) -> Option<<Self::Impl as selectors::SelectorImpl>::Identifier> {
         None
     }
 
-    fn is_part(&self, name: &<Self::Impl as selectors::SelectorImpl>::Identifier) -> bool {
+    fn is_part(&self, _name: &<Self::Impl as selectors::SelectorImpl>::Identifier) -> bool {
         false
     }
 
@@ -763,7 +764,7 @@ impl<'a> TElement for BlitzNode<'a> {
 
     fn transition_rule(
         &self,
-        context: &SharedStyleContext,
+        _context: &SharedStyleContext,
     ) -> Option<Arc<Locked<PropertyDeclarationBlock>>> {
         None
     }
@@ -782,9 +783,7 @@ impl<'a> TElement for BlitzNode<'a> {
     }
 
     fn id(&self) -> Option<&style::Atom> {
-        self.raw_dom_data
-            .attr(local_name!("id"))
-            .map(|val| &Atom::from(val))
+        self.element_data().and_then(|data| data.id.as_ref())
     }
 
     fn each_class<F>(&self, mut callback: F)
@@ -833,7 +832,7 @@ impl<'a> TElement for BlitzNode<'a> {
 
     unsafe fn unset_dirty_descendants(&self) {}
 
-    fn store_children_to_process(&self, n: isize) {
+    fn store_children_to_process(&self, _n: isize) {
         unimplemented!()
     }
 
@@ -867,7 +866,7 @@ impl<'a> TElement for BlitzNode<'a> {
     }
 
     fn mutate_data(&self) -> Option<AtomicRefMut<style::data::ElementData>> {
-        let mut stylo_data = self.stylo_element_data.borrow_mut();
+        let stylo_data = self.stylo_element_data.borrow_mut();
         if stylo_data.is_some() {
             Some(AtomicRefMut::map(stylo_data, |sd| sd.as_mut().unwrap()))
         } else {
@@ -883,22 +882,22 @@ impl<'a> TElement for BlitzNode<'a> {
         false
     }
 
-    fn has_animations(&self, context: &SharedStyleContext) -> bool {
+    fn has_animations(&self, _context: &SharedStyleContext) -> bool {
         false
     }
 
     fn has_css_animations(
         &self,
-        context: &SharedStyleContext,
-        pseudo_element: Option<style::selector_parser::PseudoElement>,
+        _context: &SharedStyleContext,
+        _pseudo_element: Option<style::selector_parser::PseudoElement>,
     ) -> bool {
         false
     }
 
     fn has_css_transitions(
         &self,
-        context: &SharedStyleContext,
-        pseudo_element: Option<style::selector_parser::PseudoElement>,
+        _context: &SharedStyleContext,
+        _pseudo_element: Option<style::selector_parser::PseudoElement>,
     ) -> bool {
         false
     }
@@ -917,8 +916,8 @@ impl<'a> TElement for BlitzNode<'a> {
 
     fn match_element_lang(
         &self,
-        override_lang: Option<Option<style::selector_parser::AttrValue>>,
-        value: &style::selector_parser::Lang,
+        _override_lang: Option<Option<style::selector_parser::AttrValue>>,
+        _value: &style::selector_parser::Lang,
     ) -> bool {
         false
     }
@@ -927,7 +926,7 @@ impl<'a> TElement for BlitzNode<'a> {
         // Check node is a <body> element
         let is_body_element = self
             .raw_dom_data
-            .is_element_with_tag_name(local_name!("body"));
+            .is_element_with_tag_name(&local_name!("body"));
 
         // If it isn't then return early
         if !is_body_element {
@@ -945,8 +944,8 @@ impl<'a> TElement for BlitzNode<'a> {
 
     fn synthesize_presentational_hints_for_legacy_attributes<V>(
         &self,
-        visited_handling: VisitedHandlingMode,
-        hints: &mut V,
+        _visited_handling: VisitedHandlingMode,
+        _hints: &mut V,
     ) where
         V: Push<style::applicable_declarations::ApplicableDeclarationBlock>,
     {
@@ -962,7 +961,7 @@ impl<'a> TElement for BlitzNode<'a> {
 
     fn query_container_size(
         &self,
-        display: &style::values::specified::Display,
+        _display: &style::values::specified::Display,
     ) -> euclid::default::Size2D<Option<app_units::Au>> {
         // FIXME: Implement container queries. For now this effectively disables them without panicking.
         Default::default()

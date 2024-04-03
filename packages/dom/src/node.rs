@@ -1,26 +1,20 @@
-use std::borrow::Cow;
-use std::cell::{Cell, Ref, RefCell};
-use std::rc::Rc;
-
-use atomic_refcell::AtomicRefCell;
+use atomic_refcell::{AtomicRef, AtomicRefCell};
 use html5ever::{local_name, LocalName, QualName};
 use image::DynamicImage;
-use markup5ever_rcdom::Handle;
 use selectors::matching::QuirksMode;
 use slab::Slab;
 use std::fmt::Write;
 use std::sync::Arc;
+use style::properties::ComputedValues;
 use style::stylesheets::UrlExtraData;
+use style::Atom;
 use style::{
     data::ElementData,
-    properties::{parse_style_attribute, PropertyDeclaration, PropertyDeclarationBlock},
+    properties::{parse_style_attribute, PropertyDeclarationBlock},
     servo_arc::Arc as ServoArc,
     shared_lock::{Locked, SharedRwLock},
     stylesheets::CssRuleType,
-    values::specified::Attr,
-    Atom,
 };
-use style_traits::dom::ElementState;
 use taffy::{
     prelude::{Layout, Style},
     Cache,
@@ -96,11 +90,11 @@ impl NodeData {
         }
     }
 
-    pub fn is_element_with_tag_name(&self, name: LocalName) -> bool {
+    pub fn is_element_with_tag_name(&self, name: &LocalName) -> bool {
         let Some(elem) = self.downcast_element() else {
             return false;
         };
-        elem.name.local == name
+        elem.name.local == *name
     }
 
     pub fn attrs(&self) -> Option<&[Attribute]> {
@@ -131,6 +125,9 @@ pub struct ElementNodeData {
     /// The elements tag name, namespace and prefix
     pub name: QualName,
 
+    /// The elements id attribute parsed as an atom (if it has one)
+    pub id: Option<Atom>,
+
     /// The element's attributes
     pub attrs: Vec<Attribute>,
 
@@ -156,7 +153,7 @@ impl ElementNodeData {
         Some(&attr.value)
     }
 
-    pub fn flush_style_attribute(&mut self) {
+    pub fn flush_style_attribute(&mut self, guard: &SharedRwLock) {
         self.style_attribute = self.attr(local_name!("style")).map(|style_str| {
             let url = UrlExtraData::from(
                 "data:text/css;charset=utf-8;base64,"
@@ -164,7 +161,7 @@ impl ElementNodeData {
                     .unwrap(),
             );
 
-            ServoArc::new(self.guard.wrap(parse_style_attribute(
+            ServoArc::new(guard.wrap(parse_style_attribute(
                 style_str,
                 &url,
                 None,
@@ -242,28 +239,28 @@ impl Node {
 
     pub fn element_data(&self) -> Option<&ElementNodeData> {
         match self.raw_dom_data {
-            NodeData::Element(data) => Some(&data),
+            NodeData::Element(ref data) => Some(data),
             _ => None,
         }
     }
 
     pub fn element_data_mut(&mut self) -> Option<&mut ElementNodeData> {
         match self.raw_dom_data {
-            NodeData::Element(mut data) => Some(&mut data),
+            NodeData::Element(ref mut data) => Some(data),
             _ => None,
         }
     }
 
     pub fn text_data(&self) -> Option<&TextNodeData> {
         match self.raw_dom_data {
-            NodeData::Text(data) => Some(&data),
+            NodeData::Text(ref data) => Some(data),
             _ => None,
         }
     }
 
     pub fn text_data_mut(&mut self) -> Option<&mut TextNodeData> {
         match self.raw_dom_data {
-            NodeData::Text(mut data) => Some(&mut data),
+            NodeData::Text(ref mut data) => Some(data),
             _ => None,
         }
     }
@@ -271,7 +268,7 @@ impl Node {
     pub fn node_debug_str(&self) -> String {
         let mut s = String::new();
 
-        match self.raw_dom_data {
+        match &self.raw_dom_data {
             NodeData::Document => write!(s, "DOCUMENT"),
             // NodeData::Doctype { name, .. } => write!(s, "DOCTYPE {name}"),
             NodeData::Text(data) => {
@@ -289,7 +286,7 @@ impl Node {
                 // &std::str::from_utf8(data.contents.as_bytes().split_at(10).0).unwrap_or("INVALID UTF8")
             ),
             NodeData::Element(data) => {
-                let name = data.name;
+                let name = &data.name;
                 let class = self.attr(local_name!("class")).unwrap_or("");
                 if class.len() > 0 {
                     write!(
@@ -315,6 +312,17 @@ impl Node {
         Some(&attr.value)
     }
 
+    pub fn primary_styles<'c>(&'c self) -> Option<AtomicRef<'c, ComputedValues>> {
+        let stylo_element_data = self.stylo_element_data.borrow();
+        if stylo_element_data.as_ref().and_then(|d| d.styles.get_primary()).is_some() {
+            Some(AtomicRef::map(stylo_element_data, |data: &Option<ElementData>| -> &ComputedValues {
+                &** data.as_ref().unwrap().styles.get_primary().unwrap()
+            }))
+        } else {
+            None
+        }
+    }
+
     pub fn text_content(&self) -> String {
         let mut out = String::new();
         self.write_text_content(&mut out);
@@ -322,7 +330,7 @@ impl Node {
     }
 
     fn write_text_content(&self, out: &mut String) {
-        match self.raw_dom_data {
+        match &self.raw_dom_data {
             NodeData::Text(data) => {
                 out.push_str(&data.content);
             }
@@ -336,16 +344,17 @@ impl Node {
     }
 
     pub fn flush_style_attribute(&mut self) {
-        if let Some(mut elem_data) = self.element_data_mut() {
-            elem_data.flush_style_attribute();
+        if let NodeData::Element(ref mut elem_data) = self.raw_dom_data {
+            elem_data.flush_style_attribute(&self.guard);
         }
     }
 
     pub fn order(&self) -> i32 {
         self.stylo_element_data
             .borrow()
+            .as_ref()
             .and_then(|data| data.styles.get_primary())
-            .map(|style| style.get_position().order)
+            .map(|s| s.get_position().order)
             .unwrap_or(0)
     }
 

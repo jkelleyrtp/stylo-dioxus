@@ -6,16 +6,19 @@ use std::sync::Arc;
 use self::multicolor_rounded_rect::{Edge, ElementFrame};
 use crate::{
     devtools::Devtools,
-    fontcache::FontCache,
-    imagecache::ImageCache,
+    // fontcache::FontCache,
+    // imagecache::ImageCache,
     text::TextContext,
     util::{GradientSlice, StyloGradient, ToVelloColor},
     viewport::Viewport,
 };
-use blitz_dom::{Document, Node};
+use blitz_dom::{
+    node::{NodeData, TextNodeData},
+    Document, Node,
+};
 use html5ever::local_name;
 use image::{imageops::FilterType, DynamicImage};
-use style::values::specified::position::HorizontalPositionKeyword;
+use style::{dom::TElement, values::specified::position::HorizontalPositionKeyword};
 use style::{
     properties::{style_structs::Outline, ComputedValues},
     values::{
@@ -72,11 +75,11 @@ pub struct Renderer<'s, W, DocumentLike: AsRef<Document> + AsMut<Document> + Int
     pub(crate) text_context: TextContext,
 
     /// Our image cache
-    pub(crate) images: ImageCache,
+    // pub(crate) images: ImageCache,
 
     /// A storage of fonts to load in and out.
     /// Whenever we encounter new fonts during parsing + mutations, this will become populated
-    pub(crate) fonts: FontCache,
+    // pub(crate) fonts: FontCache,
 
     pub devtools: Devtools,
 
@@ -99,15 +102,15 @@ where
         // The intention here is to split the rendering pipeline away from tao/windowing for rendering to images
 
         // 2. Set up Vello specific stuff
-        let mut render_context = RenderContext::new().unwrap();
+        let render_context = RenderContext::new().unwrap();
 
         Self {
             render_context,
             render_state: RenderState::Suspended(None),
             dom,
             text_context: Default::default(),
-            images: Default::default(),
-            fonts: Default::default(),
+            // images: Default::default(),
+            // fonts: Default::default(),
             devtools: Default::default(),
             hover_node_id: Default::default(),
             scroll_offset: 0.0,
@@ -485,7 +488,6 @@ where
         //  - list, position, table, text, ui,
         //  - custom_properties, writing_mode, rules, visited_style, flags,  box_, column, counters, effects,
         //  - inherited_box, inherited_table, inherited_text, inherited_ui,
-        use markup5ever_rcdom::NodeData;
 
         let element = &self.dom.as_ref().tree()[node];
 
@@ -494,39 +496,20 @@ where
             return;
         }
 
-        let NodeData::Element { name, attrs, .. } = &element.raw_dom_data else {
-            return;
-        };
-
         // Only draw elements with a style
-        if element.data.borrow().styles.get_primary().is_none() {
+        if element.primary_styles().is_none() {
             return;
         }
 
-        // Hide hidden things...
-        // todo: move this to state on the element itself
-        if let Some(attr) = attrs
-            .borrow()
-            .iter()
-            .find(|attr| attr.name.local == local_name!("hidden"))
-        {
-            if attr.value.as_ref() == "true" || attr.value.as_ref() == "" {
-                return;
-            }
+        // Hide elements with "hidden" attribute
+        if let Some("true" | "") = element.attr(local_name!("hidden")) {
+            return;
         }
 
         // Hide inputs with type=hidden
-        // Can this just be css?
-        if name.local == local_name!("input") {
-            if let Some(attr) = attrs
-                .borrow()
-                .iter()
-                .find(|attr| attr.name.local == local_name!("type"))
-            {
-                if attr.value.as_ref() == "hidden" {
-                    return;
-                }
-            }
+        // Implemented here rather than using the style engine for performance reasons
+        if element.local_name() == "input" && element.attr(local_name!("type")) == Some("hidden") {
+            return;
         }
 
         let cx = self.element_cx(element, location);
@@ -539,15 +522,14 @@ where
 
         for child in &cx.element.children {
             match &self.dom.as_ref().tree()[*child].raw_dom_data {
-                NodeData::Element { .. } => self.render_element(scene, *child, cx.pos),
-                NodeData::Text { contents } => {
+                NodeData::Element(_) => self.render_element(scene, *child, cx.pos),
+                NodeData::Text(TextNodeData { content }) => {
                     let (_layout, pos) = self.node_position(*child, cx.pos);
-                    cx.stroke_text(scene, &self.text_context, contents.borrow().as_ref(), pos)
+                    cx.stroke_text(scene, &self.text_context, &content, pos)
                 }
                 NodeData::Document => {}
-                NodeData::Doctype { .. } => {}
-                NodeData::Comment { .. } => {}
-                NodeData::ProcessingInstruction { .. } => {}
+                // NodeData::Doctype => {}
+                NodeData::Comment => {} // NodeData::ProcessingInstruction { .. } => {}
             }
         }
     }
@@ -557,7 +539,14 @@ where
             panic!("Renderer is not active");
         };
 
-        let style = element.data.borrow().styles.primary().clone();
+        let style = element
+            .stylo_element_data
+            .borrow()
+            .as_ref()
+            .unwrap()
+            .styles
+            .primary()
+            .clone();
 
         let (layout, pos) = self.node_position(element.id, location);
         let scale = state.viewport.scale_f64();
@@ -586,7 +575,7 @@ where
             font_size,
             text_color,
             transform,
-            image: element.additional_data.image.clone(),
+            image: element.element_data().unwrap().image.clone(),
             devtools: &self.devtools,
         }
     }
@@ -732,8 +721,8 @@ impl ElementCx<'_> {
             GenericGradient::Linear {
                 direction,
                 items,
-                repeating,
-                compat_mode,
+                // repeating,
+                // compat_mode,
                 ..
             } => self.draw_linear_gradient(scene, direction, items),
             GenericGradient::Radial {
@@ -741,7 +730,7 @@ impl ElementCx<'_> {
                 position,
                 items,
                 repeating,
-                compat_mode,
+                // compat_mode,
                 ..
             } => self.draw_radial_gradient(scene, shape, position, items, *repeating),
             GenericGradient::Conic {
@@ -923,7 +912,7 @@ impl ElementCx<'_> {
         scene.fill(peniko::Fill::NonZero, self.transform, brush, None, &shape);
     }
 
-    fn draw_image_frame(&self, scene: &mut Scene) {}
+    // fn draw_image_frame(&self, scene: &mut Scene) {}
 
     fn draw_solid_frame(&self, scene: &mut Scene) {
         let background = self.style.get_background();
@@ -1050,7 +1039,7 @@ impl ElementCx<'_> {
     /// ❌ clip: The clip computed value.
     /// ❌ filter: The filter computed value.
     /// ❌ mix_blend_mode: The mix-blend-mode computed value.
-    fn stroke_effects(&self, scene: &mut Scene) {
+    fn stroke_effects(&self, _scene: &mut Scene) {
         // also: if focused, draw a focus ring
         //
         //             let stroke_color = Color::rgb(1.0, 1.0, 1.0);
@@ -1061,31 +1050,31 @@ impl ElementCx<'_> {
         //             let stroke_color = Color::rgb(0.0, 0.0, 0.0);
         //             scene_builder.stroke(&stroke, Affine::IDENTITY, stroke_color, None, &shape);
         //             background.draw_shape(scene_builder, &smaller_shape, layout, viewport_size);
-        let effects = self.style.get_effects();
+        // let effects = self.style.get_effects();
     }
 
-    fn stroke_box_shadow(&self, scene: &mut Scene) {
-        let effects = self.style.get_effects();
-    }
+    // fn stroke_box_shadow(&self, scene: &mut Scene) {
+    //     let effects = self.style.get_effects();
+    // }
 
     fn draw_radial_gradient(
         &self,
-        scene: &mut Scene,
-        shape: &EndingShape<NonNegative<CSSPixelLength>, NonNegative<LengthPercentage>>,
-        position: &GenericPosition<LengthPercentage, LengthPercentage>,
-        items: &OwnedSlice<GenericGradientItem<StyloColor<Percentage>, LengthPercentage>>,
-        repeating: bool,
+        _scene: &mut Scene,
+        _shape: &EndingShape<NonNegative<CSSPixelLength>, NonNegative<LengthPercentage>>,
+        _position: &GenericPosition<LengthPercentage, LengthPercentage>,
+        _items: &OwnedSlice<GenericGradientItem<StyloColor<Percentage>, LengthPercentage>>,
+        _repeating: bool,
     ) {
         unimplemented!()
     }
 
     fn draw_conic_gradient(
         &self,
-        scene: &mut Scene,
-        angle: &Angle,
-        position: &GenericPosition<LengthPercentage, LengthPercentage>,
-        items: &OwnedSlice<GenericGradientItem<StyloColor<Percentage>, AngleOrPercentage>>,
-        repeating: bool,
+        _scene: &mut Scene,
+        _angle: &Angle,
+        _position: &GenericPosition<LengthPercentage, LengthPercentage>,
+        _items: &OwnedSlice<GenericGradientItem<StyloColor<Percentage>, AngleOrPercentage>>,
+        _repeating: bool,
     ) {
         unimplemented!()
     }

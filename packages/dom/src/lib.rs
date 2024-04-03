@@ -41,4 +41,5 @@ pub mod text;
 pub mod util;
 
 pub use document::Document;
+pub use htmlsink::DocumentHtmlParser;
 pub use node::Node;

@@ -14,12 +14,8 @@ use crate::{
 use html5ever::local_name;
 use taffy::{
     compute_block_layout, compute_cached_layout, compute_flexbox_layout, compute_grid_layout,
-    compute_leaf_layout, compute_root_layout, prelude::*, round_layout, Cache, LayoutPartialTree,
-    RoundTree, TraversePartialTree, TraverseTree,
-};
-use taffy::{
-    prelude::{FlexDirection, NodeId},
-    AvailableSpace, Dimension, Size, Style,
+    compute_leaf_layout, prelude::*, Cache, Dimension, FlexDirection, LayoutPartialTree, NodeId,
+    RoundTree, Size, Style, TraversePartialTree, TraverseTree,
 };
 
 impl Document {
@@ -74,7 +70,7 @@ impl LayoutPartialTree for Document {
                 char_height: 16.0,
             };
 
-            match node.raw_dom_data {
+            match &node.raw_dom_data {
                 NodeData::Text(data) => lay_text(inputs, &node.style, &data.content, &font_metrics),
                 NodeData::Element(element_data) => {
                     // Hide hidden nodes
@@ -186,8 +182,7 @@ impl PrintTree for Document {
                     Display::None => "NONE",
                 };
                 return format!("{} ({})", node.node_debug_str(), display).leak();
-            }
-            // NodeData::ProcessingInstruction { .. } => return "PROCESSING INSTRUCTION",
+            } // NodeData::ProcessingInstruction { .. } => return "PROCESSING INSTRUCTION",
         };
     }
 

@@ -1,5 +1,5 @@
 use blitz::Viewport;
-use blitz_dom::Document;
+use blitz_dom::{Document, DocumentHtmlParser};
 
 use crate::Config;
 use crate::DocumentLike;
@@ -43,8 +43,8 @@ impl HtmlDocument {
             dom.add_stylesheet(&ss);
         }
 
-        // Populate dom with HTML
-        dom.write(&html);
+        // Parse HTML string into document
+        DocumentHtmlParser::parse_into_doc(&mut dom, html);
 
         HtmlDocument { inner: dom }
     }

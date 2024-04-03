@@ -10,12 +10,16 @@ use html5ever::{
     tree_builder::{ElementFlags, NodeOrText, QuirksMode, TreeSink},
     ExpandedName, QualName,
 };
+use selectors::Element;
 use slab::Slab;
+use style::dom::TElement;
+use style::Atom;
 use style::{
     dom::{TDocument, TNode},
     shared_lock::SharedRwLock,
 };
 use taffy::{Cache, Layout};
+
 
 /// Convert an html5ever Attribute which uses tendril for its value to a blitz Attribute
 /// which uses String.
@@ -26,8 +30,10 @@ fn html5ever_to_blitz_attr(attr: html5ever::Attribute) -> Attribute {
     }
 }
 
-struct DocumentHtmlParser<'a> {
+pub struct DocumentHtmlParser<'a> {
     doc: &'a mut Document,
+
+    style_nodes: Vec<usize>,
 
     /// Errors that occurred during parsing.
     pub errors: Vec<Cow<'static, str>>,
@@ -36,12 +42,30 @@ struct DocumentHtmlParser<'a> {
     pub quirks_mode: QuirksMode,
 }
 
-impl<'b> DocumentHtmlParser<'b> {
+impl<'a> DocumentHtmlParser<'a> {
+    pub fn new<'b>(doc: &'b mut Document) -> DocumentHtmlParser<'b> {
+        DocumentHtmlParser {
+            doc,
+            style_nodes: Vec::new(),
+            errors: Vec::new(),
+            quirks_mode: QuirksMode::NoQuirks,
+        }
+    }
+
+    pub fn parse_into_doc<'d> (doc: &'d mut Document, html: &str) -> &'d mut Document {
+        let mut sink = Self::new(doc);
+        sink.create_node(NodeData::Document);
+        html5ever::parse_document(sink, Default::default())
+            .from_utf8()
+            .read_from(&mut html.as_bytes())
+            .unwrap()
+    }
+
     fn create_node(&mut self, node_data: NodeData) -> usize {
         let slab_ptr = self.doc.nodes.as_mut() as *mut Slab<Node>;
         let entry = self.doc.nodes.vacant_entry();
         let id = entry.key();
-        let entry = entry.insert(Node {
+        entry.insert(Node {
             tree: slab_ptr,
 
             id,
@@ -74,7 +98,7 @@ impl<'b> DocumentHtmlParser<'b> {
         &self.doc.nodes[id]
     }
 
-    fn node_mut(&self, id: usize) -> &mut Node {
+    fn node_mut(&mut self, id: usize) -> &mut Node {
         &mut self.doc.nodes[id]
     }
 
@@ -98,7 +122,7 @@ impl<'b> DocumentHtmlParser<'b> {
     }
 
     fn previous_child(&mut self, parent_id: usize, target_id: usize) -> Option<usize> {
-        let children = self.node(parent_id).children;
+        let children = &self.node(parent_id).children;
         match children.iter().position(|cid| *cid == target_id) {
             None | Some(0) => None,
             Some(idx) => Some(children[idx - 1]),
@@ -107,14 +131,14 @@ impl<'b> DocumentHtmlParser<'b> {
 
     fn previous_sibling(&mut self, target_id: usize) -> Option<usize> {
         let parent_id = self.node(target_id).parent?;
-        let children = self.node(parent_id).children;
+        let children = &self.node(parent_id).children;
         match children.iter().position(|cid| *cid == target_id) {
             None | Some(0) => None,
             Some(idx) => Some(children[idx - 1]),
         }
     }
 
-    fn process_linked_stylesheet(&mut self, target_id: usize) {
+    fn load_linked_stylesheet(&mut self, target_id: usize) {
         let node = self.node(target_id);
 
         let rel_attr = node.attr(local_name!("rel"));
@@ -152,6 +176,27 @@ impl<'b> DocumentHtmlParser<'b> {
             }
         }
     }
+
+    fn process_button_input(&mut self, target_id: usize) {
+        let node = self.node(target_id);
+        let Some(data) = node.element_data() else {
+            return;
+        };
+
+        let tagname = data.name.local.as_ref();
+        let type_attr = data.attr(local_name!("type"));
+        let value = data.attr(local_name!("value"));
+
+        // Add content of "value" attribute as a text node child if:
+        //   - Tag name is
+        if let ("input", Some("button" | "submit" | "reset"), Some(value)) =
+            (tagname, type_attr, value)
+        {
+            let value = value.to_string();
+            let id = self.create_text_node(&value);
+            self.append(&target_id, NodeOrText::AppendNode(id));
+        }
+    }
 }
 
 impl<'b> TreeSink for DocumentHtmlParser<'b> {
@@ -160,8 +205,24 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
     // we use the ID of the nodes in the tree as the handle
     type Handle = usize;
 
-    fn finish(self) -> Self::Output {
-        // TODO: compute child_idx fields
+    fn finish(mut self) -> Self::Output {
+        // Add inline stylesheets (<style> elements)
+        for id in &self.style_nodes {
+            self.doc.process_style_element(*id);
+        }
+
+        // Remove node 0 from itself
+        // FIXME: this shouldn't happen in the first place
+        self.node_mut(0).children.retain(|id| *id != 0);
+        self.node_mut(0).parent = None;
+
+        // Compute child_idx fields.
+        self.doc.flush_child_indexes(0, 0, 0);
+
+        for error in self.errors {
+            println!("ERROR: {}", error);
+        }
+
         self.doc
     }
 
@@ -185,38 +246,46 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
         &mut self,
         name: QualName,
         attrs: Vec<html5ever::Attribute>,
-        flags: ElementFlags,
+        _flags: ElementFlags,
     ) -> Self::Handle {
+        let id_attr_atom = attrs.iter()
+            .find(|attr| &attr.name.local == "id")
+            .map(|attr| Atom::from(attr.value.as_ref()));
         let mut data = ElementNodeData {
-            name,
+            name: name.clone(),
+            id: id_attr_atom,
             attrs: attrs.into_iter().map(html5ever_to_blitz_attr).collect(),
             style_attribute: Default::default(),
             image: None,
             template_contents: None,
         };
-        data.flush_style_attribute();
+        data.flush_style_attribute(&self.doc.guard);
 
         let id = self.create_node(NodeData::Element(data));
+        let node = self.node(id);
 
         // If the node has an "id" attribute, store it in the ID map.
-        if let Some(id_attr) = data.attr(local_name!("id")) {
+        if let Some(id_attr) = node.attr(local_name!("id")) {
             self.doc.nodes_to_id.insert(id_attr.to_string(), id);
         }
 
         // Custom post-processing by element tag name
         match name.local.as_ref() {
-            "link" => self.process_linked_stylesheet(id),
+            "link" => self.load_linked_stylesheet(id),
             "img" => self.load_image(id),
+            "input" => self.process_button_input(id),
+            "style" => self.style_nodes.push(id),
+            _ => {}
         }
 
         id
     }
 
-    fn create_comment(&mut self, text: StrTendril) -> Self::Handle {
+    fn create_comment(&mut self, _text: StrTendril) -> Self::Handle {
         self.create_node(NodeData::Comment)
     }
 
-    fn create_pi(&mut self, target: StrTendril, data: StrTendril) -> Self::Handle {
+    fn create_pi(&mut self, _target: StrTendril, _data: StrTendril) -> Self::Handle {
         // NOTE: html5ever does not call this method (only xml5ever does)
         unimplemented!()
     }
@@ -228,8 +297,8 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
                 self.node_mut(child_id).parent = Some(*parent_id);
             }
             NodeOrText::AppendText(text) => {
-                let has_appended =
-                    self.try_append_text_to_text_node(self.last_child(*parent_id), &text);
+                let last_child_id = self.last_child(*parent_id);
+                let has_appended = self.try_append_text_to_text_node(last_child_id, &text);
                 if !has_appended {
                     let id = self.create_text_node(&text);
                     self.append(parent_id, NodeOrText::AppendNode(id));
@@ -243,11 +312,11 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
     fn append_before_sibling(
         &mut self,
         sibling_id: &Self::Handle,
-        mut new_node: NodeOrText<Self::Handle>,
+        new_node: NodeOrText<Self::Handle>,
     ) {
         let sibling = self.node(*sibling_id);
         let parent_id = sibling.parent.expect("Sibling has not parent");
-        let mut parent = self.node_mut(parent_id);
+        let parent = self.node(parent_id);
         let sibling_pos = parent
             .children
             .iter()
@@ -272,12 +341,12 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
             NodeOrText::AppendNode(id) => id,
         };
 
-        parent.children.insert(sibling_pos, new_child_id);
-
         // TODO: Should remove from existing parent?
         assert_eq!(self.node_mut(new_child_id).parent, None);
-
         self.node_mut(new_child_id).parent = Some(parent_id);
+        self.node_mut(parent_id)
+            .children
+            .insert(sibling_pos, new_child_id);
     }
 
     fn append_based_on_parent_node(
@@ -296,14 +365,14 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
 
     fn append_doctype_to_document(
         &mut self,
-        name: StrTendril,
-        public_id: StrTendril,
-        system_id: StrTendril,
+        _name: StrTendril,
+        _public_id: StrTendril,
+        _system_id: StrTendril,
     ) {
         // Ignore. We don't care about the DOCTYPE for now.
     }
 
-    fn get_template_contents(&mut self, target: &Self::Handle) -> Self::Handle {
+    fn get_template_contents(&mut self, _target: &Self::Handle) -> Self::Handle {
         unimplemented!()
     }
 
@@ -316,9 +385,9 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
     }
 
     fn add_attrs_if_missing(&mut self, target: &Self::Handle, attrs: Vec<html5ever::Attribute>) {
-        let mut element_data = &self
+        let element_data = self
             .node_mut(*target)
-            .element_data()
+            .element_data_mut()
             .expect("Not an element");
 
         let existing_names = element_data
@@ -346,7 +415,7 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
     fn reparent_children(&mut self, node_id: &Self::Handle, new_parent_id: &Self::Handle) {
         // Take children array from old parent
         let node = self.node_mut(*node_id);
-        let mut children = std::mem::replace(&mut node.children, Vec::new());
+        let children = std::mem::replace(&mut node.children, Vec::new());
 
         // Update parent reference of children
         for child_id in children.iter() {
@@ -354,8 +423,7 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
         }
 
         // Add children to new parent
-        let new_parent = &self.node_mut(*new_parent_id);
-        new_parent.children.extend(&children);
+        self.node_mut(*new_parent_id).children.extend(&children);
     }
 }
 
@@ -375,14 +443,9 @@ fn parses_some_html() {
         device_pixel_ratio,
     );
     let mut doc = Document::new(device);
+    let sink = DocumentHtmlParser::new(&mut doc);
 
-    let consumer = DocumentHtmlParser {
-        doc: doc.as_mut(),
-        errors: vec![],
-        quirks_mode: QuirksMode::NoQuirks,
-    };
-
-    html5ever::parse_document(consumer, Default::default())
+    html5ever::parse_document(sink, Default::default())
         .from_utf8()
         .read_from(&mut html.as_bytes())
         .unwrap();
