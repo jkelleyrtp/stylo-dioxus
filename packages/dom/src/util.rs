@@ -66,16 +66,28 @@ pub(crate) fn fetch_image(url: &str) -> Result<DynamicImage, ImageFetchErr> {
 
 // Debug print an RcDom
 pub fn walk_tree(indent: usize, node: &Node) {
-    print!("{}", " ".repeat(indent));
 
+    // Skip all-whitespace text nodes entirely
+    if let NodeData::Text(data) = &node.raw_dom_data {
+        if data.content.chars().all(|c| c.is_ascii_whitespace()) {
+            return;
+        }
+    }
+
+    print!("{}", " ".repeat(indent));
     match &node.raw_dom_data {
         NodeData::Document => println!("#Document"),
 
         NodeData::Text(data) => {
             if data.content.chars().all(|c| c.is_ascii_whitespace()) {
-                print!("#text: <whitespace>");
+                println!("#text: <whitespace>");
             } else {
-                println!("#text: {}", data.content.trim().escape_default())
+                let content = data.content.trim();
+                if content.len() > 10 {
+                    println!("#text: {}...", content.split_at(10).0.escape_default())
+                } else {
+                    println!("#text: {}", data.content.trim().escape_default())
+                }
             }
         }
 
@@ -86,7 +98,11 @@ pub fn walk_tree(indent: usize, node: &Node) {
             for attr in data.attrs.iter() {
                 print!(" {}=\"{}\"", attr.name.local, attr.value);
             }
-            println!(">");
+            if !node.children.is_empty() {
+                println!(">");
+            } else {
+                println!("/>");
+            }
         }
 
         // NodeData::Doctype {
@@ -97,7 +113,13 @@ pub fn walk_tree(indent: usize, node: &Node) {
         // NodeData::ProcessingInstruction { .. } => unreachable!(),
     }
 
-    for child_id in node.children.iter() {
-        walk_tree(indent + 4, node.with(*child_id));
+    if !node.children.is_empty() {
+        for child_id in node.children.iter() {
+            walk_tree(indent + 2, node.with(*child_id));
+        }
+
+        if let NodeData::Element(data) = &node.raw_dom_data {
+            println!("{}</{}>", " ".repeat(indent), data.name.local);
+        }
     }
 }

@@ -101,7 +101,7 @@ impl Document {
     }
 
     pub fn print_tree(&self) {
-        self.root_node().print_tree(0);
+        crate::util::walk_tree(0, self.root_node());
     }
 
     pub fn process_style_element(&mut self, target_id: usize) {
