@@ -17,7 +17,6 @@ use blitz_dom::Document;
 //     NodeId,
 // };
 
-
 pub struct DioxusDocument {
     inner: Document,
 }
@@ -40,9 +39,6 @@ impl Into<Document> for DioxusDocument {
     }
 }
 impl DocumentLike for DioxusDocument {}
-
-
-
 
 // #[derive(Component)]
 // struct ElementIdComponent(ElementId);

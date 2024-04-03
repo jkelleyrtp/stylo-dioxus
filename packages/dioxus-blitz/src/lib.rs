@@ -150,7 +150,6 @@ fn launch_with_window<Doc: DocumentLike + 'static>(window: crate::window::View<'
             //         view.request_redraw();
             //     }
             // }
-
             Event::NewEvents(_) => {
                 for id in windows.keys() {
                     _ = proxy.send_event(UserWindowEvent(EventData::Poll, *id));

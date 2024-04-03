@@ -419,7 +419,7 @@ impl<'a> TDocument for BlitzNode<'a> {
     }
 
     fn is_html_document(&self) -> bool {
-        true//self.id == 1
+        true //self.id == 1
     }
 
     fn quirks_mode(&self) -> QuirksMode {

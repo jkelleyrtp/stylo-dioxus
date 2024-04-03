@@ -80,7 +80,6 @@ pub struct Renderer<'s, W, DocumentLike: AsRef<Document> + AsMut<Document> + Int
     /// A storage of fonts to load in and out.
     /// Whenever we encounter new fonts during parsing + mutations, this will become populated
     // pub(crate) fonts: FontCache,
-
     pub devtools: Devtools,
 
     hover_node_id: Option<usize>,

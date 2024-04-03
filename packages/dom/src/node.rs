@@ -314,10 +314,17 @@ impl Node {
 
     pub fn primary_styles<'c>(&'c self) -> Option<AtomicRef<'c, ComputedValues>> {
         let stylo_element_data = self.stylo_element_data.borrow();
-        if stylo_element_data.as_ref().and_then(|d| d.styles.get_primary()).is_some() {
-            Some(AtomicRef::map(stylo_element_data, |data: &Option<ElementData>| -> &ComputedValues {
-                &** data.as_ref().unwrap().styles.get_primary().unwrap()
-            }))
+        if stylo_element_data
+            .as_ref()
+            .and_then(|d| d.styles.get_primary())
+            .is_some()
+        {
+            Some(AtomicRef::map(
+                stylo_element_data,
+                |data: &Option<ElementData>| -> &ComputedValues {
+                    &**data.as_ref().unwrap().styles.get_primary().unwrap()
+                },
+            ))
         } else {
             None
         }
