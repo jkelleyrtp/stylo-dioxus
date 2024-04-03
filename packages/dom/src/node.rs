@@ -210,6 +210,15 @@ impl Node {
         self.tree().get(id).unwrap()
     }
 
+    pub fn print_tree(&self, level: usize) {
+        println!("{} {} {:?} {} {} {:?}", "  ".repeat(level), self.id, self.parent, self.child_idx, self.node_debug_str().replace("\n", ""), self.children);
+        // println!("{} {:?}", "  ".repeat(level), self.children);
+        for child_id in self.children.iter() {
+            let child = self.with(*child_id);
+            child.print_tree(level + 1)
+        }
+    }
+
     // Get the nth node in the parents child list
     pub fn forward(&self, n: usize) -> Option<&Node> {
         self.tree()[self.parent?]

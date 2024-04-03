@@ -100,6 +100,10 @@ impl Document {
         }
     }
 
+    pub fn print_tree(&self) {
+        self.root_node().print_tree(0);
+    }
+
     // pub fn populate_from_rc_dom(&mut self, children: &[Handle], parent: Option<usize>) {
     //     for (child_idx, node) in children.into_iter().enumerate() {
     //         // Create this node, absorbing any script/style data.

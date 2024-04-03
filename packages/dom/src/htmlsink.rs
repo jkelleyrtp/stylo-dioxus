@@ -425,5 +425,7 @@ fn parses_some_html() {
         .read_from(&mut html.as_bytes())
         .unwrap();
 
+    doc.print_tree()
+
     // Now our tree should have some nodes in it
 }
