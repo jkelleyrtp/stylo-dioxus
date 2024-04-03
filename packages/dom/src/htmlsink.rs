@@ -181,16 +181,11 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
     // we use the ID of the nodes in the tree as the handle
     type Handle = usize;
 
-    fn finish(mut self) -> Self::Output {
+    fn finish(self) -> Self::Output {
         // Add inline stylesheets (<style> elements)
         for id in &self.style_nodes {
             self.doc.process_style_element(*id);
         }
-
-        // Remove node 0 from itself
-        // FIXME: this shouldn't happen in the first place
-        self.node_mut(0).children.retain(|id| *id != 0);
-        self.node_mut(0).parent = None;
 
         // Compute child_idx fields.
         self.doc.flush_child_indexes(0, 0, 0);
