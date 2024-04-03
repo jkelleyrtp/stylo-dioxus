@@ -552,8 +552,10 @@ impl<'a> selectors::Element for BlitzNode<'a> {
         self.element_data().expect("Not an element").name.ns == *ns
     }
 
-    fn is_same_type(&self, other: &Self) -> bool {
-        self.local_name() == other.local_name() && self.namespace() == other.namespace()
+    fn is_same_type(&self, _other: &Self) -> bool {
+        // FIXME: implementing this correctly currently triggers a debug_assert ("Invalid cache") in selectors
+        //self.local_name() == other.local_name() && self.namespace() == other.namespace()
+        false
     }
 
     fn attr_matches(
