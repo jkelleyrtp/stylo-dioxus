@@ -1,7 +1,7 @@
 use std::io::{Cursor, Read};
 
 use image::DynamicImage;
-use markup5ever_rcdom::{Handle, NodeData};
+use crate::node::{Node, NodeData};
 
 const USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/81.0";
 const FILE_SIZE_LIMIT: u64 = 1_000_000_000; // 1GB
@@ -65,44 +65,39 @@ pub(crate) fn fetch_image(url: &str) -> Result<DynamicImage, ImageFetchErr> {
 }
 
 // Debug print an RcDom
-pub fn walk_rc_dom(indent: usize, handle: &Handle) {
-    let node = handle;
-    for _ in 0..indent {
-        print!(" ");
-    }
-    match node.data {
+pub fn walk_tree(indent: usize, node: &Node) {
+    print!("{}", " ".repeat(indent));
+
+    match &node.raw_dom_data {
         NodeData::Document => println!("#Document"),
 
-        NodeData::Doctype {
-            ref name,
-            ref public_id,
-            ref system_id,
-        } => println!("<!DOCTYPE {} \"{}\" \"{}\">", name, public_id, system_id),
-
-        NodeData::Text { ref contents } => {
-            println!("#text: {}", contents.borrow().escape_default())
+        NodeData::Text(data) => {
+            if data.content.chars().all(|c| c.is_ascii_whitespace()) {
+                print!("#text: <whitespace>");
+            } else {
+                println!("#text: {}", data.content.trim().escape_default())
+            }
         }
 
-        NodeData::Comment { ref contents } => println!("<!-- {} -->", contents.escape_default()),
+        NodeData::Comment => println!("<!-- COMMENT -->"),
 
-        NodeData::Element {
-            ref name,
-            ref attrs,
-            ..
-        } => {
-            // assert!(name.ns == ns!(html));
-            print!("<{}", name.local);
-            for attr in attrs.borrow().iter() {
-                // assert!(attr.name.ns == ns!());
+        NodeData::Element(data) => {
+            print!("<{}", data.name.local);
+            for attr in data.attrs.iter() {
                 print!(" {}=\"{}\"", attr.name.local, attr.value);
             }
             println!(">");
         }
 
-        NodeData::ProcessingInstruction { .. } => unreachable!(),
+        // NodeData::Doctype {
+        //     ref name,
+        //     ref public_id,
+        //     ref system_id,
+        // } => println!("<!DOCTYPE {} \"{}\" \"{}\">", name, public_id, system_id),
+        // NodeData::ProcessingInstruction { .. } => unreachable!(),
     }
 
-    for child in node.children.borrow().iter() {
-        walk_rc_dom(indent + 4, child);
+    for child_id in node.children.iter() {
+        walk_tree(indent + 4, node.with(*child_id));
     }
 }
