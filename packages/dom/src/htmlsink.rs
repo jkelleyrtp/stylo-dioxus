@@ -318,6 +318,7 @@ impl<'b> TreeSink for DocumentHtmlParser<'b> {
 
         // TODO: Should remove from existing parent?
         assert_eq!(self.node_mut(new_child_id).parent, None);
+
         self.node_mut(new_child_id).parent = Some(parent_id);
         self.node_mut(parent_id)
             .children
