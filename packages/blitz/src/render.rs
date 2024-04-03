@@ -568,7 +568,7 @@ where
             frame,
             scale,
             style,
-            layout,
+            // layout,
             pos,
             element,
             font_size,
@@ -595,7 +595,7 @@ where
 struct ElementCx<'a> {
     frame: ElementFrame,
     style: style::servo_arc::Arc<ComputedValues>,
-    layout: Layout,
+    // layout: Layout,
     pos: Point,
     scale: f64,
     element: &'a Node,

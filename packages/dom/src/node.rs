@@ -211,7 +211,15 @@ impl Node {
     }
 
     pub fn print_tree(&self, level: usize) {
-        println!("{} {} {:?} {} {} {:?}", "  ".repeat(level), self.id, self.parent, self.child_idx, self.node_debug_str().replace("\n", ""), self.children);
+        println!(
+            "{} {} {:?} {} {} {:?}",
+            "  ".repeat(level),
+            self.id,
+            self.parent,
+            self.child_idx,
+            self.node_debug_str().replace("\n", ""),
+            self.children
+        );
         // println!("{} {:?}", "  ".repeat(level), self.children);
         for child_id in self.children.iter() {
             let child = self.with(*child_id);

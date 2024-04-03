@@ -11,7 +11,7 @@ use selectors::{
     sink::Push,
     Element, OpaqueElement,
 };
-use slab::Slab;
+// use slab::Slab;
 use style::values::specified::box_::DisplayOutside;
 use style::values::specified::TextAlignKeyword;
 use style::CaseSensitivityExt;
@@ -668,7 +668,7 @@ impl<'a> TElement for BlitzNode<'a> {
 
     fn traversal_children(&self) -> style::dom::LayoutIterator<Self::TraversalChildrenIterator> {
         LayoutIterator(Traverser {
-            dom: self.tree(),
+            // dom: self.tree(),
             parent: self,
             child_index: 0,
         })
@@ -930,7 +930,7 @@ impl<'a> TElement for BlitzNode<'a> {
 }
 
 pub struct Traverser<'a> {
-    dom: &'a Slab<Node>,
+    // dom: &'a Slab<Node>,
     parent: BlitzNode<'a>,
     child_index: usize,
 }
