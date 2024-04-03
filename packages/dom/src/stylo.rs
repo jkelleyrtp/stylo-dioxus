@@ -662,9 +662,9 @@ impl<'a> selectors::Element for BlitzNode<'a> {
         id: &<Self::Impl as selectors::SelectorImpl>::Identifier,
         case_sensitivity: selectors::attr::CaseSensitivity,
     ) -> bool {
-        self.attr(local_name!("id"))
-            .map(Atom::from)
-            .map(|id_attr| case_sensitivity.eq_atom(&id_attr, id))
+        self.element_data()
+            .and_then(|data| data.id.as_ref())
+            .map(|id_attr| case_sensitivity.eq_atom(id_attr, id))
             .unwrap_or(false)
     }
 
