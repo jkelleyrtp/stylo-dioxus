@@ -1,4 +1,14 @@
-# Stylo-Blitz-demo
+# ~~Stylo-Blitz-demo~~ Archived Blitz V2 prototype
+
+
+
+> [!IMPORTANT]
+> THIS REPOSITORY HAS MOVED
+> Visit the official [Blitz repository](http://github.com/dioxuslabs/blitz) for the most up-to-date code.
+> This project was originally a prototype for Blitz V2 and has since reached maturity to be mainlined.a
+
+
+
 
 > A WIP native engine designed for [Dioxus](https://github.com/dioxuslabs/dioxus), intended to eventually become Blitz.
 
